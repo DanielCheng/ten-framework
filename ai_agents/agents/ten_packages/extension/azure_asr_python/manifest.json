@@ -14,7 +14,6 @@
       "version": "=0.6.19"
     }
   ],
-  "interface": "../../system/ten_ai_base/api/asr-interface.json",
   "api": {
     "property": {
       "properties": {
