@@ -8,8 +8,6 @@ from const import (
     FINALIZE_MODE_MUTE_PKG,
     DUMP_FILE_NAME,
     MODULE_NAME_ASR,
-    REMOTE_USER_ID,
-    STREAM_ID,
 )
 from ten_ai_base.asr import (
     ASRBufferConfig,
@@ -18,7 +16,6 @@ from ten_ai_base.asr import (
     AsyncASRBaseExtension,
 )
 from ten_ai_base.message import ModuleError, ModuleErrorVendorInfo, ModuleErrorCode
-from ten_ai_base.transcription import UserTranscription
 from ten_runtime import (
     AsyncTenEnv,
     AudioFrame,
@@ -39,8 +36,6 @@ class AzureASRExtension(AsyncASRBaseExtension):
         self.connection: speechsdk.Connection | None = None
         self.stream: speechsdk.audio.PushAudioInputStream | None = None
         self.config: AzureASRConfig | None = None
-        self.stream_id: int = 0
-        self.user_id: str = ""
         self.audio_dumper: Dumper | None = None
         self.timeline: AudioTimeline = AudioTimeline()
         self.sent_user_audio_duration_ms_before_last_reset: int = 0
@@ -55,7 +50,9 @@ class AzureASRExtension(AsyncASRBaseExtension):
         try:
             self.config = AzureASRConfig.model_validate_json(config_json)
             self.config.update(self.config.params)
-            ten_env.log_info(f"config: {self.config.to_json(sensitive_handling=True)}")
+            ten_env.log_info(
+                f"KEYPOINT vendor_config: {self.config.to_json(sensitive_handling=True)}"
+            )
 
             if self.config.dump:
                 dump_file_path = os.path.join(self.config.dump_path, DUMP_FILE_NAME)
@@ -73,7 +70,6 @@ class AzureASRExtension(AsyncASRBaseExtension):
 
     @override
     async def start_connection(self) -> None:
-        assert self.ten_env is not None
         assert self.config is not None
         self.ten_env.log_info("start_connection")
 
@@ -82,7 +78,9 @@ class AzureASRExtension(AsyncASRBaseExtension):
                 subscription=self.config.key, region=self.config.region
             )
         except Exception as e:
-            self.ten_env.log_error(f"KEYPOINT invalid vendor config: {e}")
+            self.ten_env.log_error(
+                f"KEYPOINT start_connection failed: invalid vendor config: {e}"
+            )
             await self.send_asr_error(
                 ModuleError(
                     module=MODULE_NAME_ASR,
@@ -155,7 +153,6 @@ class AzureASRExtension(AsyncASRBaseExtension):
 
     @override
     async def finalize(self, session_id: str | None) -> None:
-        assert self.ten_env is not None
         assert self.config is not None
 
         self.last_finalize_timestamp = int(datetime.now().timestamp() * 1000)
@@ -224,7 +221,7 @@ class AzureASRExtension(AsyncASRBaseExtension):
             )
         )
 
-    async def _handle_recognized_result(
+    async def _handle_asr_result(
         self,
         text: str,
         final: bool,
@@ -232,9 +229,8 @@ class AzureASRExtension(AsyncASRBaseExtension):
         duration_ms: int = 0,
         language: str = "",
     ):
-        """Handle the recognized result from Azure ASR."""
+        """Handle the ASR result from Azure ASR."""
         assert self.config is not None
-        assert self.ten_env is not None
 
         if final:
             await self._finalize_end()
@@ -253,8 +249,8 @@ class AzureASRExtension(AsyncASRBaseExtension):
         self, evt: speechsdk.SpeechRecognitionEventArgs
     ):
         """Handle the recognizing event from Azure ASR."""
-        assert self.ten_env is not None
         assert self.config is not None
+
         text = evt.result.text
         start_ms = evt.result.offset // 10000
         duration_ms = evt.result.duration // 10000
@@ -281,7 +277,7 @@ class AzureASRExtension(AsyncASRBaseExtension):
             f"azure event callback on_recognizing: {text}, language: {language}, full_json: {evt.result.json}"
         )
 
-        await self._handle_recognized_result(
+        await self._handle_asr_result(
             text,
             final=False,
             start_ms=actual_start_ms,
@@ -293,8 +289,8 @@ class AzureASRExtension(AsyncASRBaseExtension):
         self, evt: speechsdk.SpeechRecognitionEventArgs
     ):
         """Handle the recognized event from Azure ASR."""
-        assert self.ten_env is not None
         assert self.config is not None
+
         text = evt.result.text
         start_ms = evt.result.offset // 10000
         duration_ms = evt.result.duration // 10000
@@ -320,7 +316,7 @@ class AzureASRExtension(AsyncASRBaseExtension):
         self.ten_env.log_debug(
             f"azure event callback on_recognized: {text}, language: {language}, full_json: {evt.result.json}"
         )
-        await self._handle_recognized_result(
+        await self._handle_asr_result(
             text,
             final=True,
             start_ms=actual_start_ms,
@@ -332,7 +328,6 @@ class AzureASRExtension(AsyncASRBaseExtension):
         self, evt: speechsdk.SessionEventArgs
     ):
         """Handle the session started event from Azure ASR."""
-        assert self.ten_env is not None
         self.ten_env.log_debug(
             f"azure event callback on_session_started, session_id: {evt.session_id}"
         )
@@ -346,7 +341,6 @@ class AzureASRExtension(AsyncASRBaseExtension):
         self, evt: speechsdk.SessionEventArgs
     ):
         """Handle the session stopped event from Azure ASR."""
-        assert self.ten_env is not None
         self.ten_env.log_debug(
             f"azure event callback on_session_stopped, session_id: {evt.session_id}"
         )
@@ -360,10 +354,10 @@ class AzureASRExtension(AsyncASRBaseExtension):
         self, evt: speechsdk.SpeechRecognitionCanceledEventArgs
     ):
         """Handle the canceled event from Azure ASR."""
-        assert self.ten_env is not None
+
         cancellation_details = evt.cancellation_details
         self.ten_env.log_error(
-            f"azure event callback on_canceled, code: {cancellation_details.code}, reason: {cancellation_details.reason}, error_details: {cancellation_details.error_details}"
+            f"KEYPOINT vendor_error, code: {cancellation_details.code}, reason: {cancellation_details.reason}, error_details: {cancellation_details.error_details}"
         )
         await self.send_asr_error(
             ModuleError(
@@ -382,7 +376,6 @@ class AzureASRExtension(AsyncASRBaseExtension):
         self, evt: speechsdk.RecognitionEventArgs
     ):
         """Handle the speech start detected event from Azure ASR."""
-        assert self.ten_env is not None
         self.ten_env.log_debug(
             f"azure event callback on_speech_start_detected, session_id: {evt.session_id}"
         )
@@ -391,7 +384,6 @@ class AzureASRExtension(AsyncASRBaseExtension):
         self, evt: speechsdk.RecognitionEventArgs
     ):
         """Handle the speech end detected event from Azure ASR."""
-        assert self.ten_env is not None
         self.ten_env.log_debug(
             f"azure event callback on_speech_end_detected, session_id: {evt.session_id}"
         )
@@ -400,7 +392,6 @@ class AzureASRExtension(AsyncASRBaseExtension):
         self, evt: speechsdk.ConnectionEventArgs
     ):
         """Handle the connected event from Azure ASR."""
-        assert self.ten_env is not None
         self.ten_env.log_debug(
             f"azure event callback on_connected, session_id: {evt.session_id}"
         )
@@ -409,36 +400,38 @@ class AzureASRExtension(AsyncASRBaseExtension):
         self, evt: speechsdk.ConnectionEventArgs
     ):
         """Handle the disconnected event from Azure ASR."""
-        assert self.ten_env is not None
         self.ten_env.log_debug(
             f"azure event callback on_disconnected, session_id: {evt.session_id}"
         )
 
     async def _handle_finalize_disconnect(self):
-        assert self.ten_env is not None
         assert self.config is not None
+
         if self.client is None:
             _ = self.ten_env.log_debug("finalize disconnect: client is not connected")
             return
+
         self.client.stop_continuous_recognition()
         _ = self.ten_env.log_debug("finalize disconnect completed")
 
     async def _handle_finalize_mute_pkg(self):
-        assert self.ten_env is not None
         assert self.config is not None
+
         if self.stream is None:
             _ = self.ten_env.log_debug("finalize mute pkg: stream is not initialized")
             return
+
         empty_audio_bytes_len = int(
             self.config.mute_pkg_duration_ms * self.config.sample_rate / 1000 * 2
         )
         frame = bytearray(empty_audio_bytes_len)
         self.stream.write(bytes(frame))
         self.timeline.add_silence_audio(self.config.mute_pkg_duration_ms)
-        _ = self.ten_env.log_debug("finalize mute pkg completed")
+        self.ten_env.log_debug("finalize mute pkg completed")
 
     async def _handle_reconnect(self):
-        await asyncio.sleep(0.2)
+        # TODO: implement reconnect
+        await asyncio.sleep(0.5)
         await self.start_connection()
 
     async def _finalize_end(self) -> None:
@@ -446,13 +439,12 @@ class AzureASRExtension(AsyncASRBaseExtension):
             timestamp = int(datetime.now().timestamp() * 1000)
             latency = timestamp - self.last_finalize_timestamp
             self.ten_env.log_debug(
-                f"KEYPOINT azure finalize end at {timestamp}, counter: {latency}"
+                f"KEYPOINT finalize end at {timestamp}, counter: {latency}"
             )
             self.last_finalize_timestamp = 0
             await self.send_asr_finalize_end()
 
     async def stop_connection(self) -> None:
-        assert self.ten_env is not None
         if self.client:
             self.client.stop_continuous_recognition()
             self.client = None
@@ -481,12 +473,6 @@ class AzureASRExtension(AsyncASRBaseExtension):
         assert self.stream is not None
 
         buf = frame.lock_buf()
-        try:
-            self.stream_id, _ = frame.get_property_int(STREAM_ID)
-            self.user_id, _ = frame.get_property_string(REMOTE_USER_ID)
-        except Exception as e:
-            self.ten_env.log_warn(f"send_audio: invalid stream_id or user_id - {e}")
-            return
         if self.audio_dumper:
             await self.audio_dumper.push_bytes(bytes(buf))
         self.timeline.add_user_audio(
