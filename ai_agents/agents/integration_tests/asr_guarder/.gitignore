@@ -2,4 +2,4 @@ ten_packages
 .env
 tests/test_data
 manifest.json
-property.json
+manifest-lock.json
