@@ -29,7 +29,7 @@ DEFAULT_SESSION_ID = "test_session_123"
 TEST_DURATION_SECONDS = 15  # Total test duration
 TEST_TIMEOUT_SECONDS = 30
 
-DEFAULT_CONFIG_FILE = "invalid.json"
+DEFAULT_CONFIG_FILE = "property_invalid.json"
 
 
 class AsrReconnectionTester(AsyncExtensionTester):
