@@ -55,6 +55,7 @@ jobs:
           echo "BRANCH=${{ github.event.inputs.branch || github.ref_name }}" >> $GITHUB_ENV
 
       - name: Parse and set custom environment variables
+        shell: bash
         run: |
           echo "Setting up custom environment variables..."
 
@@ -65,22 +66,25 @@ jobs:
 
           # Parse and set environment variables
           echo "Custom environment variables:"
-          while IFS= read -r line || [[ -n "$line" ]]; do
+          while IFS= read -r line || [ -n "$line" ]; do
+            # Remove leading/trailing whitespace
+            line=$(echo "$line" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+
             # Skip empty lines and comment lines
-            if [[ -z "$line" ]] || [[ "$line" =~ ^[[:space:]]*# ]]; then
+            if [ -z "$line" ] || echo "$line" | grep -q '^[[:space:]]*#'; then
               continue
             fi
 
             # Check if it is in KEY=VALUE format
-            if [[ "$line" =~ ^[A-Za-z_][A-Za-z0-9_]*=.* ]]; then
-              key=$(echo "$line" | cut -d'=' -f1 | xargs)
-              value=$(echo "$line" | cut -d'=' -f2- | xargs)
+            if echo "$line" | grep -q '^[A-Za-z_][A-Za-z0-9_]*='; then
+              key=$(echo "$line" | cut -d'=' -f1)
+              value=$(echo "$line" | cut -d'=' -f2-)
 
               # Set environment variable
               echo "${key}=${value}" >> $GITHUB_ENV
 
               # Display in log (hide sensitive values)
-              if [[ "$key" =~ (KEY|TOKEN|SECRET|PASSWORD|PASS) ]]; then
+              if echo "$key" | grep -qE '(KEY|TOKEN|SECRET|PASSWORD|PASS)'; then
                 echo "  ✅ ${key}=*** (hidden for security)"
               else
                 echo "  ✅ ${key}=${value}"
@@ -101,7 +105,7 @@ jobs:
           echo "Config Directory: ${{ github.event.inputs.config_dir }}"
           echo ""
           echo "Custom Environment Variables:"
-          if [[ -n "${{ github.event.inputs.env_vars }}" ]]; then
+          if [ -n "${{ github.event.inputs.env_vars }}" ]; then
             echo "✅ Custom environment variables have been set (see above for details)"
           else
             echo "ℹ️  No custom environment variables provided"
