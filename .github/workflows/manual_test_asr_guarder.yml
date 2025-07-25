@@ -80,12 +80,8 @@ jobs:
                 # Set environment variable
                 echo "${key}=${value}" >> $GITHUB_ENV
 
-                # Display in log (hide sensitive values)
-                if echo "$key" | grep -qE '(KEY|TOKEN|SECRET|PASSWORD|PASS)'; then
-                  echo "  ✅ ${key}=*** (hidden for security)"
-                else
-                  echo "  ✅ ${key}=${value}"
-                fi
+                # Display in log (only show key for security)
+                echo "  ✅ ${key}=*** (value hidden for security)"
               else
                 echo "  ⚠️  Skipping invalid format: $env_pair"
               fi
@@ -103,9 +99,8 @@ jobs:
           echo ""
           echo "Custom Environment Variables Input:"
           if [ -n "${{ github.event.inputs.env_vars }}" ]; then
-            echo "✅ Environment variables provided (semicolon-separated):"
-            echo "   Raw input: ${{ github.event.inputs.env_vars }}"
-            echo "📝 See environment parsing step above for processed variables"
+            echo "✅ Environment variables provided (semicolon-separated)"
+            echo "📝 See environment parsing step above for processed variables (values hidden for security)"
           else
             echo "ℹ️  No custom environment variables provided"
           fi
