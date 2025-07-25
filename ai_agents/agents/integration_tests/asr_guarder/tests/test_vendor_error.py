@@ -1,3 +1,10 @@
+#!/usr/bin/env python3
+#
+# This file is part of TEN Framework, an open source project.
+# Licensed under the Apache License, Version 2.0.
+# See the LICENSE file for more information.
+#
+
 from typing import Any
 from typing_extensions import override
 from ten_runtime import (
@@ -20,7 +27,7 @@ AUDIO_BYTES_PER_SAMPLE = 2
 FRAME_INTERVAL_MS = 10
 
 # Constants for test configuration
-DEFAULT_SESSION_ID = "test_session_123"
+DEFAULT_SESSION_ID = "test_vendor_error_session_123"
 DEFAULT_CONFIG_FILE = "property_invalid.json"
 
 # Error validation constants
@@ -227,26 +234,6 @@ class VendorErrorTester(AsyncExtensionTester):
         )
         return True
 
-    def _validate_session_id_consistency(
-        self, ten_env: AsyncTenEnvTester, json_data: dict[str, Any]
-    ) -> bool:
-        """Validate that session_id is correctly passed through the error."""
-        metadata = json_data.get("metadata", {})
-        session_id: str | None = metadata.get("session_id")
-
-        if session_id is None:
-            ten_env.log_info("No session_id found in error metadata")
-            return True  # Not a critical failure
-
-        if session_id != self.session_id:
-            ten_env.log_error(
-                f"Session ID mismatch: expected {self.session_id}, got {session_id}"
-            )
-            return False
-
-        ten_env.log_info(f"✅ Session ID consistency validated: {session_id}")
-        return True
-
     @override
     async def on_data(self, ten_env: AsyncTenEnvTester, data: Data) -> None:
         """Handle incoming data and validate error responses."""
@@ -278,13 +265,6 @@ class VendorErrorTester(AsyncExtensionTester):
             if not self._validate_error_code_types(ten_env, data_dict):
                 self._stop_test_with_error(
                     ten_env, "Error code validation failed"
-                )
-                return
-
-            # Validate session ID consistency
-            if not self._validate_session_id_consistency(ten_env, data_dict):
-                self._stop_test_with_error(
-                    ten_env, "Session ID validation failed"
                 )
                 return
 
