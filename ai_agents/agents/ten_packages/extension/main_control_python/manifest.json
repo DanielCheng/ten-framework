@@ -1,6 +1,6 @@
 {
   "type": "extension",
-  "name": "bytedance_tts_duplex",
+  "name": "main_control_python",
   "version": "0.1.0",
   "dependencies": [
     {
@@ -25,26 +25,9 @@
     ]
   },
   "api": {
-    "interface": [
-      {
-        "import_uri": "../../system/ten_ai_base/api/tts-interface.json"
-      }
-    ],
     "property": {
       "properties": {
-        "appid": {
-          "type": "string"
-        },
-        "token": {
-          "type": "string"
-        },
-        "voice_type": {
-          "type": "string"
-        },
-        "sample_rate": {
-          "type": "int64"
-        },
-        "api_url": {
+        "greeting": {
           "type": "string"
         }
       }
