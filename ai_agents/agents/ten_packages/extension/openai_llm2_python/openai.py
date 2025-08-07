@@ -30,6 +30,7 @@ from ten_ai_base.struct import (
     LLMResponseToolCall,
     TextContent,
 )
+from ten_ai_base.types import LLMToolMetadata
 from ten_runtime.async_ten_env import AsyncTenEnv
 
 
@@ -118,6 +119,39 @@ class OpenAIChatGPT:
             self.session.proxies.update(proxies)
         self.client.session = self.session
 
+
+    def _convert_tools_to_dict(self, tool: LLMToolMetadata):
+        json_dict = {
+            "type": "function",
+            "function": {
+                "name": tool.name,
+                "description": tool.description,
+                "parameters": {
+                    "type": "object",
+                    "properties": {},
+                    "required": [],
+                    "additionalProperties": False,
+                },
+            },
+            "strict": True,
+        }
+
+        for param in tool.parameters:
+            json_dict["function"]["parameters"]["properties"][param.name] = {
+                "type": param.type,
+                "description": param.description,
+            }
+            if param.required:
+                json_dict["function"]["parameters"]["required"].append(
+                    param.name
+                )
+            if param.type == "array":
+                json_dict["function"]["parameters"]["properties"][param.name][
+                    "items"
+                ] = param.items
+
+        return json_dict
+
     async def get_chat_completions(
         self, input: LLMRequest
     ) -> AsyncGenerator[LLMResponse, None]:
@@ -182,24 +216,7 @@ class OpenAIChatGPT:
         for tool in input.tools or []:
             if tools is None:
                 tools = []
-            tool_json = {
-                "type": "function",
-                "function": {
-                    "name": tool.name,
-                    "description": tool.description,
-                    "parameters": [],
-                },
-            }
-            for param in tool.parameters or []:
-                tool_json["function"]["parameters"].append(
-                    {
-                        "name": param.name,
-                        "type": param.type,
-                        "description": param.description,
-                        "required": param.required,
-                    }
-                )
-            tools.append(tool_json)
+            tools.append(self._convert_tools_to_dict(tool))
 
         req = {
             "model": self.config.model,

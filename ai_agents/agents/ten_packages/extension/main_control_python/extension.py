@@ -7,7 +7,8 @@ import asyncio
 import json
 import time
 import traceback
-from typing import Literal, Tuple
+from typing import Literal, Optional, Tuple
+import uuid
 from pydantic import BaseModel
 
 from ten_ai_base.const import CMD_PROPERTY_TOOL
@@ -39,6 +40,7 @@ class MainControlExtension(AsyncExtension):
         self.ten_env: AsyncTenEnv = None
         self.stopped = False
         self.sentence_fragment = ""
+        self.current_metadata: Optional[dict] = None
 
     async def on_init(self, ten_env: AsyncTenEnv) -> None:
         self.ten_env = ten_env
@@ -87,6 +89,10 @@ class MainControlExtension(AsyncExtension):
                         text = asr_result_dict.get("text", "")
                         final = asr_result_dict.get("final", False)
                         metadata = asr_result_dict.get("metadata", {})
+                        self.current_metadata = {
+                            "session_id": metadata.get("session_id", "100"),
+                            "turn_id": metadata.get("turn_id", -1),
+                        }
                         stream_id = int(metadata.get("session_id", "100"))
                         if final or len(text) > 2:
                             await self._interrupt(self.ten_env)
@@ -112,7 +118,7 @@ class MainControlExtension(AsyncExtension):
                         self._rtc_user_count += 1
                         if self._rtc_user_count == 1 and self.config.greeting:
                             await self._send_to_tts(
-                                self.ten_env, self.config.greeting
+                                self.ten_env, self.config.greeting, True
                             )
                             await self._send_transcript(
                                 self.ten_env,
@@ -147,9 +153,14 @@ class MainControlExtension(AsyncExtension):
                     CmdResult.create(StatusCode.ERROR, cmd)
                 )
 
-    async def _send_to_tts(self, ten_env: AsyncTenEnv, text: str):
-        await _send_data(ten_env, "text_data", "tts", {"text": text})
-        ten_env.log_info(f"_send_to_tts: text {text}")
+    async def _send_to_tts(self, ten_env: AsyncTenEnv, text: str, is_final: bool):
+        request_id = str(uuid.uuid4())
+        await _send_data(ten_env, "tts_text_input", "tts", {
+            "request_id": request_id,
+            "text": text,
+            "text_input_end": is_final
+        })
+        ten_env.log_info(f"_send_to_tts: text {text} is_final {is_final}")
 
     async def _on_llm_response(
         self, ten_env: AsyncTenEnv, delta: str, text:str, is_final: bool
@@ -161,7 +172,7 @@ class MainControlExtension(AsyncExtension):
                 self.sentence_fragment, delta
             )
             for sentence in sentences:
-                await self._send_to_tts(ten_env, sentence)
+                await self._send_to_tts(ten_env, sentence, False)
         await self._send_transcript(ten_env, "assistant", text, is_final, 100)  # Assuming a default stream ID
 
     async def _send_transcript(
