@@ -11,7 +11,7 @@ from ten_ai_base.const import CMD_PROPERTY_RESULT
 from ten_ai_base.helper import AsyncQueue
 from ten_ai_base.struct import LLMMessage, LLMMessageContent, LLMMessageFunctionCall, LLMMessageFunctionCallOutput, LLMRequest, LLMResponse, LLMResponseMessageDelta, LLMResponseMessageDone, LLMResponseToolCall, parse_llm_response
 from ten_ai_base.types import LLMToolMetadata, LLMToolResult
-from .helper import _send_cmd, _send_cmd_ex, parse_sentences
+from .helper import _send_cmd, _send_cmd_ex
 from ten_runtime import AsyncTenEnv, Loc, StatusCode
 
 
@@ -26,12 +26,11 @@ class LLMExec:
         self.input_queue = AsyncQueue()
         self.stopped = False
         self.on_response: Optional[
-            Callable[[AsyncTenEnv, str, bool], Awaitable[None]]
+            Callable[[AsyncTenEnv, str, str, bool], Awaitable[None]]
         ] = None
         self.on_tool_call: Optional[
             Callable[[AsyncTenEnv, LLMToolMetadata], Awaitable[None]]
         ] = None
-        self.sentence_fragment = ""
         self.current_task: Optional[asyncio.Task] = None
         self.loop = asyncio.get_event_loop()
         self.loop.create_task(self._process_input_queue())
@@ -172,13 +171,8 @@ class LLMExec:
             case LLMResponseMessageDelta():
                 delta = llm_output.delta
                 text = llm_output.content
-                if delta:
-                    sentences, self.sentence_fragment = parse_sentences(
-                        self.sentence_fragment, delta
-                    )
-                    for sentence in sentences:
-                        if self.on_response:
-                            await self.on_response(self.ten_env, sentence, False)
+                if delta and self.on_response:
+                        await self.on_response(self.ten_env, delta, text, False)
                 if text:
                     await self._write_context(
                         self.ten_env, "assistant", text
@@ -186,7 +180,7 @@ class LLMExec:
             case LLMResponseMessageDone():
                 text = llm_output.content
                 if self.on_response and text:
-                    await self.on_response(self.ten_env, text, True)
+                    await self.on_response(self.ten_env, "", text, True)
             case LLMResponseToolCall():
                 self.ten_env.log_info(f"_handle_llm_response: invoking tool call {llm_output.name}")
                 loc = self.tool_registry.get(llm_output.name)

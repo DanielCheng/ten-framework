@@ -986,13 +986,13 @@
             {
               "type": "extension",
               "name": "stt",
-              "addon": "deepgram_asr_python",
+              "addon": "azure_asr_python",
               "extension_group": "stt",
               "property": {
-                "api_key": "${env:DEEPGRAM_API_KEY}",
-                "language": "en-US",
-                "model": "nova-2",
-                "sample_rate": 16000
+                "params": {
+                  "key": "${env:AZURE_STT_KEY}",
+                  "region": "${env:AZURE_STT_REGION}"
+                }
               }
             },
             {
@@ -1001,7 +1001,7 @@
               "addon": "openai_llm2_python",
               "extension_group": "chatgpt",
               "property": {
-                "base_url": "",
+                "base_url": "https://api.openai.com/v1",
                 "api_key": "${env:OPENAI_API_KEY}",
                 "frequency_penalty": 0.9,
                 "model": "${env:OPENAI_MODEL}",
@@ -1050,24 +1050,6 @@
               "type": "extension",
               "name": "streamid_adapter",
               "addon": "streamid_adapter"
-            },
-            {
-              "type": "selector",
-              "name": "controlled_extensions",
-              "filter": {
-                "field": "name",
-                "operator": "regex",
-                "value": "tts|llm|agora_rtc"
-              }
-            },
-            {
-              "type": "selector",
-              "name": "text_data_dest",
-              "filter": {
-                "field": "name",
-                "operator": "regex",
-                "value": "message_collector|llm|tts"
-              }
             }
           ],
           "connections": [
@@ -1115,25 +1097,10 @@
                       "extension": "agora_rtc"
                     }
                   ]
-                }
-              ],
-              "data": [
+                },
                 {
-                  "name": "asr_result",
+                  "name": "tool_register",
                   "source": [
-                    {
-                      "extension": "stt"
-                    }
-                  ]
-                }
-              ]
-            },
-            {
-              "extension": "llm",
-              "cmd": [
-                {
-                  "name": "tool_call",
-                  "dest": [
                     {
                       "extension": "weatherapi_tool_python"
                     }
@@ -1142,21 +1109,10 @@
               ],
               "data": [
                 {
-                  "name": "text_data",
-                  "dest": [
+                  "name": "asr_result",
+                  "source": [
                     {
-                      "extension": "main_control",
-                      "msg_conversion": {
-                        "type": "per_property",
-                        "keep_original": true,
-                        "rules": [
-                          {
-                            "path": "ten.name",
-                            "conversion_mode": "fixed_value",
-                            "value": "llm_result"
-                          }
-                        ]
-                      }
+                      "extension": "stt"
                     }
                   ]
                 }
@@ -1183,19 +1139,6 @@
                   "dest": [
                     {
                       "extension": "agora_rtc"
-                    }
-                  ]
-                }
-              ]
-            },
-            {
-              "extension": "weatherapi_tool_python",
-              "cmd": [
-                {
-                  "name": "tool_register",
-                  "dest": [
-                    {
-                      "extension": "llm"
                     }
                   ]
                 }

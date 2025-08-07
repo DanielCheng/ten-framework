@@ -21,7 +21,7 @@ from ten_runtime import (
     CmdResult,
     Data,
 )
-from .helper import _send_data, _send_cmd
+from .helper import _send_data, _send_cmd, parse_sentences
 
 
 class MainControlConfig(BaseModel):
@@ -38,6 +38,7 @@ class MainControlExtension(AsyncExtension):
         self.llm_exec: LLMExec = None
         self.ten_env: AsyncTenEnv = None
         self.stopped = False
+        self.sentence_fragment = ""
 
     async def on_init(self, ten_env: AsyncTenEnv) -> None:
         self.ten_env = ten_env
@@ -151,11 +152,16 @@ class MainControlExtension(AsyncExtension):
         ten_env.log_info(f"_send_to_tts: text {text}")
 
     async def _on_llm_response(
-        self, ten_env: AsyncTenEnv, text: str, is_final: bool
+        self, ten_env: AsyncTenEnv, delta: str, text:str, is_final: bool
     ):
-        ten_env.log_info(f"_on_llm_response: text {text}, is_final {is_final}")
+        ten_env.log_info(f"_on_llm_response: delta {delta} text {text}, is_final {is_final}")
+
         if not is_final:
-            await self._send_to_tts(ten_env, text)
+            sentences, self.sentence_fragment = parse_sentences(
+                self.sentence_fragment, delta
+            )
+            for sentence in sentences:
+                await self._send_to_tts(ten_env, sentence)
         await self._send_transcript(ten_env, "assistant", text, is_final, 100)  # Assuming a default stream ID
 
     async def _send_transcript(
