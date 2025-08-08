@@ -12,7 +12,7 @@ from ten_runtime import (
     AudioFrame,
     AsyncTenEnv,
 )
-from ten_ai_base.message import ModuleError, ModuleErrorCode
+from ten_ai_base.message import ModuleError, ModuleErrorCode, ModuleErrorVendorInfo
 from ten_ai_base.asr import (
     ASRResult,
     AsyncASRBaseExtension,
@@ -20,7 +20,6 @@ from ten_ai_base.asr import (
     ASRBufferConfigModeKeep,
 )
 from ten_ai_base.struct import ASRWord
-from ten_ai_base.timeline import AudioTimeline
 from ten_ai_base.dumper import Dumper
 
 from amazon_transcribe.client import TranscribeStreamingClient
@@ -37,7 +36,6 @@ class AWSASRExtension(AsyncASRBaseExtension):
         self.client: TranscribeStreamingClient | None = None
         self.stream: StartStreamTranscriptionEventStream | None = None
         self.config: AWSASRConfig | None = None
-        self.timeline: AudioTimeline = AudioTimeline()
         self.sent_user_audio_duration_ms_before_last_reset: int = 0
         self.last_finalize_timestamp: int = 0
         self.audio_dumper: Dumper | None = None
@@ -77,7 +75,7 @@ class AWSASRExtension(AsyncASRBaseExtension):
 
         # Initialize reconnection manager
         self.reconnect_manager = ReconnectManager(logger=ten_env)
-        self.timeline.reset()
+        self.audio_timeline.reset()
 
     @override
     async def start_connection(self) -> None:
@@ -90,9 +88,9 @@ class AWSASRExtension(AsyncASRBaseExtension):
             )
             self.ten_env.log_info("AWS ASR client started")
             self.sent_user_audio_duration_ms_before_last_reset += (
-                self.timeline.get_total_user_audio_duration()
+                self.audio_timeline.get_total_user_audio_duration()
             )
-            self.timeline.reset()
+            self.audio_timeline.reset()
             self.last_finalize_timestamp = 0
         except Exception as e:
             self.ten_env.log_error(f"failed to create AWS ASR client: {e}")
@@ -121,11 +119,17 @@ class AWSASRExtension(AsyncASRBaseExtension):
                     code=ModuleErrorCode.NON_FATAL_ERROR.value,
                     message=str(e),
                 ),
+                ModuleErrorVendorInfo(
+                    vendor=self.vendor(),
+                    code="1000",
+                    message=str(e),
+                ),
             )
 
         async def _handle_events():
-            assert self.stream is not None
             try:
+                if self.stream is None:
+                    raise Exception("stream is None")
                 async for event in self.stream.output_stream:
                     if isinstance(event, TranscriptEvent):
                         try:
@@ -174,7 +178,7 @@ class AWSASRExtension(AsyncASRBaseExtension):
             buf = frame.lock_buf()
             if self.audio_dumper:
                 await self.audio_dumper.push_bytes(bytes(buf))
-            self.timeline.add_user_audio(
+            self.audio_timeline.add_user_audio(
                 int(len(buf) / (self.input_audio_sample_rate() / 1000 * 2))
             )
             await self.stream.input_stream.send_audio_event(audio_chunk=bytes(buf))
@@ -255,7 +259,7 @@ class AWSASRExtension(AsyncASRBaseExtension):
                         else 0
                     )
                     actual_start_ms = int(
-                        self.timeline.get_audio_duration_before_time(start_ms)
+                        self.audio_timeline.get_audio_duration_before_time(start_ms)
                         + self.sent_user_audio_duration_ms_before_last_reset
                     )
 
@@ -279,7 +283,7 @@ class AWSASRExtension(AsyncASRBaseExtension):
             )
 
             actual_start_ms = int(
-                self.timeline.get_audio_duration_before_time(start_ms)
+                self.audio_timeline.get_audio_duration_before_time(start_ms)
                 + self.sent_user_audio_duration_ms_before_last_reset
             )
 
@@ -346,5 +350,5 @@ class AWSASRExtension(AsyncASRBaseExtension):
         )
         frame = bytearray(empty_audio_bytes_len)
         await self.stream.input_stream.send_audio_event(audio_chunk=bytes(frame))
-        self.timeline.add_silence_audio(self.config.mute_pkg_duration_ms)
+        self.audio_timeline.add_silence_audio(self.config.mute_pkg_duration_ms)
         self.ten_env.log_debug("finalize mute pkg completed")

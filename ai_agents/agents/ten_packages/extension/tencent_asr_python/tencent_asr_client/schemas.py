@@ -106,13 +106,13 @@ class RequestParams(BaseModel):
     timestamp: int = Field(description="Current UNIX timestamp in seconds", default_factory=lambda: int(time.time()))
     expired: int = Field(
         description="Signature expiration time UNIX timestamp in seconds",
-        default_factory=lambda data: data["timestamp"] + 24 * 60 * 60,
+        default_factory=lambda: int(time.time()) + 24 * 60 * 60,
     )
     nonce: int = Field(
         description="Random positive integer, max 10 digits",
         ge=0,
         le=9999999999,
-        default_factory=lambda data: random.randint(0, 9999999999),
+        default_factory=lambda: random.randint(0, 9999999999),
     )
     engine_model_type: str = Field(default="16k_zh", description="Engine model type")
     voice_id: str = Field(description="Global unique identifier for audio stream", default_factory=lambda: str(uuid.uuid4()))

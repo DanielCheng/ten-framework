@@ -42,6 +42,7 @@ class TranscribeASRExtension(AsyncASRBaseExtension):
         self.event_handler = None
 
     async def on_init(self, ten_env: AsyncTenEnv) -> None:
+        await super().on_init(ten_env)
         ten_env.log_info("TranscribeASRExtension on_init")
 
     async def on_cmd(self, ten_env: AsyncTenEnv, cmd: Cmd) -> None:

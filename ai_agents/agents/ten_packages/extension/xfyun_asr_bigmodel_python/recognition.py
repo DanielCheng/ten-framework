@@ -20,6 +20,7 @@ STATUS_FIRST_FRAME = 0  # First frame identifier
 STATUS_CONTINUE_FRAME = 1  # Middle frame identifier
 STATUS_LAST_FRAME = 2  # Last frame identifier
 
+
 class XfyunWSRecognitionCallback:
     """WebSocket Speech Recognition Callback Interface"""
 
@@ -46,7 +47,9 @@ class XfyunWSRecognitionCallback:
 class XfyunWSRecognition:
     """Async WebSocket-based speech recognition class"""
 
-    def __init__(self, app_id, api_key, api_secret, ten_env=None, config=None, callback=None):
+    def __init__(
+        self, app_id, api_key, api_secret, ten_env=None, config=None, callback=None
+    ):
         """
         Initialize WebSocket speech recognition
         :param app_id: Application ID
@@ -66,7 +69,7 @@ class XfyunWSRecognition:
             "domain": "ist_ed_open",
             "language": "zh_cn",
             "accent": "mandarin",
-            "dwa": "wpgs"
+            "dwa": "wpgs",
         }
 
         # Merge user configuration and default configuration
@@ -91,10 +94,31 @@ class XfyunWSRecognition:
 
         # Optional business parameters
         optional_business_params = [
-            "dwa", "request_id", "eos", "pd", "res_id", "vto", "punc", "nunum",
-            "pptaw", "dyhotws", "personalization", "seg_max", "seg_min", "seg_weight",
-            "speex_size", "spkdia", "pgsnum", "vad_mdn", "language_type", "dhw",
-            "dhw_mod", "feature_list", "rsgid", "rlang", "pgs_flash_freq"
+            "dwa",
+            "request_id",
+            "eos",
+            "pd",
+            "res_id",
+            "vto",
+            "punc",
+            "nunum",
+            "pptaw",
+            "dyhotws",
+            "personalization",
+            "seg_max",
+            "seg_min",
+            "seg_weight",
+            "speex_size",
+            "spkdia",
+            "pgsnum",
+            "vad_mdn",
+            "language_type",
+            "dhw",
+            "dhw_mod",
+            "feature_list",
+            "rsgid",
+            "rlang",
+            "pgs_flash_freq",
         ]
         for param in optional_business_params:
             if param in self.config:
@@ -114,7 +138,7 @@ class XfyunWSRecognition:
 
     def _create_url(self):
         """Generate WebSocket connection URL"""
-        url = f'wss://{self.host}/v2/ist'
+        url = f"wss://{self.host}/v2/ist"
 
         # Generate RFC1123 format timestamp
         now = datetime.now()
@@ -127,22 +151,20 @@ class XfyunWSRecognition:
 
         # Encrypt using hmac-sha256
         signature_sha = hmac.new(
-            self.api_secret.encode('utf-8'),
-            signature_origin.encode('utf-8'),
-            digestmod=hashlib.sha256
+            self.api_secret.encode("utf-8"),
+            signature_origin.encode("utf-8"),
+            digestmod=hashlib.sha256,
         ).digest()
-        signature_sha = base64.b64encode(signature_sha).decode(encoding='utf-8')
+        signature_sha = base64.b64encode(signature_sha).decode(encoding="utf-8")
 
         authorization_origin = f'api_key="{self.api_key}", algorithm="hmac-sha256", headers="host date request-line", signature="{signature_sha}"'
-        authorization = base64.b64encode(authorization_origin.encode('utf-8')).decode(encoding='utf-8')
+        authorization = base64.b64encode(authorization_origin.encode("utf-8")).decode(
+            encoding="utf-8"
+        )
 
         # Combine authentication parameters into dictionary
-        v = {
-            "authorization": authorization,
-            "host": self.host,
-            "date": date
-        }
-        url = url + '?' + urlencode(v)
+        v = {"authorization": authorization, "host": self.host, "date": date}
+        url = url + "?" + urlencode(v)
         return url
 
     async def _handle_message(self, message):
@@ -156,7 +178,9 @@ class XfyunWSRecognition:
 
             if code != 0:
                 error_msg = message_data.get("message")
-                self._log_debug(f"[{timestamp}] sid: {sid} call error: {error_msg}, code: {code}")
+                self._log_debug(
+                    f"[{timestamp}] sid: {sid} call error: {error_msg}, code: {code}"
+                )
                 if self.callback:
                     self._log_debug(f"[{timestamp}] Calling callback.on_error")
                     await self.callback.on_error(error_msg, code)
@@ -167,12 +191,20 @@ class XfyunWSRecognition:
 
         except Exception as e:
             error_msg = f"Error processing message: {e}"
-            self._log_debug(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {error_msg}")
+            self._log_debug(
+                f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {error_msg}"
+            )
             if self.callback:
                 await self.callback.on_error(error_msg)
 
     async def _message_handler(self):
         """Handle incoming WebSocket messages"""
+        if self.websocket is None:
+            self._log_debug(
+                "WebSocket connection not established, skipping message handler"
+            )
+            return
+
         try:
             async for message in self.websocket:
                 await self._handle_message(message)
@@ -206,13 +238,10 @@ class XfyunWSRecognition:
             ssl_context.check_hostname = False
             ssl_context.verify_mode = ssl.CERT_NONE
 
-
             # Connect to WebSocket with timeout
             self.websocket = await websockets.connect(
-                    ws_url,
-                    ssl=ssl_context,
-                    open_timeout=timeout
-                )
+                ws_url, ssl=ssl_context, open_timeout=timeout
+            )
 
             self._log_debug("### WebSocket opened ###")
             self.is_first_frame = True
@@ -258,9 +287,9 @@ class XfyunWSRecognition:
                     "data": {
                         "status": STATUS_FIRST_FRAME,
                         "format": f"audio/L16;rate={self.config.get('sample_rate', 16000)}",
-                        "audio": str(base64.b64encode(audio_data), 'utf-8'),
-                        "encoding": "raw"
-                    }
+                        "audio": str(base64.b64encode(audio_data), "utf-8"),
+                        "encoding": "raw",
+                    },
                 }
                 self.is_first_frame = False
             else:
@@ -269,8 +298,8 @@ class XfyunWSRecognition:
                     "data": {
                         "status": STATUS_CONTINUE_FRAME,
                         "format": f"audio/L16;rate={self.config.get('sample_rate', 16000)}",
-                        "audio": str(base64.b64encode(audio_data), 'utf-8'),
-                        "encoding": "raw"
+                        "audio": str(base64.b64encode(audio_data), "utf-8"),
+                        "encoding": "raw",
                     }
                 }
 
@@ -299,7 +328,7 @@ class XfyunWSRecognition:
                     "status": STATUS_LAST_FRAME,
                     "format": f"audio/L16;rate={self.config.get('sample_rate', 16000)}",
                     "audio": "",
-                    "encoding": "raw"
+                    "encoding": "raw",
                 }
             }
             await self.websocket.send(json.dumps(d))
@@ -344,7 +373,7 @@ class XfyunWSRecognition:
         # Check if websocket is still open by checking the state
         try:
             # For websockets library, we can check the state attribute
-            if hasattr(self.websocket, 'state'):
+            if hasattr(self.websocket, "state"):
                 return self.is_started and self.websocket.state == State.OPEN
             # Fallback: just check if websocket exists and is_started is True
             else:

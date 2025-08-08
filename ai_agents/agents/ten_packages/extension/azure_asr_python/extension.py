@@ -38,7 +38,6 @@ class AzureASRExtension(AsyncASRBaseExtension):
         self.stream: speechsdk.audio.PushAudioInputStream | None = None
         self.config: AzureASRConfig | None = None
         self.audio_dumper: Dumper | None = None
-        self.timeline: AudioTimeline = AudioTimeline()
         self.sent_user_audio_duration_ms_before_last_reset: int = 0
         self.last_finalize_timestamp: int = 0
 
@@ -267,7 +266,7 @@ class AzureASRExtension(AsyncASRBaseExtension):
         start_ms = evt.result.offset // 10000
         duration_ms = evt.result.duration // 10000
         actual_start_ms = int(
-            self.timeline.get_audio_duration_before_time(start_ms)
+            self.audio_timeline.get_audio_duration_before_time(start_ms)
             + self.sent_user_audio_duration_ms_before_last_reset
         )
         language = self.config.primary_language()
@@ -307,7 +306,7 @@ class AzureASRExtension(AsyncASRBaseExtension):
         start_ms = evt.result.offset // 10000
         duration_ms = evt.result.duration // 10000
         actual_start_ms = int(
-            self.timeline.get_audio_duration_before_time(start_ms)
+            self.audio_timeline.get_audio_duration_before_time(start_ms)
             + self.sent_user_audio_duration_ms_before_last_reset
         )
         language = self.config.primary_language()
@@ -344,9 +343,9 @@ class AzureASRExtension(AsyncASRBaseExtension):
             f"azure event callback on_session_started, session_id: {evt.session_id}"
         )
         self.sent_user_audio_duration_ms_before_last_reset += (
-            self.timeline.get_total_user_audio_duration()
+            self.audio_timeline.get_total_user_audio_duration()
         )
-        self.timeline.reset()
+        self.audio_timeline.reset()
         self.connected = True
 
     async def _azure_event_handler_on_session_stopped(
@@ -442,7 +441,7 @@ class AzureASRExtension(AsyncASRBaseExtension):
         )
         frame = bytearray(empty_audio_bytes_len)
         self.stream.write(bytes(frame))
-        self.timeline.add_silence_audio(self.config.mute_pkg_duration_ms)
+        self.audio_timeline.add_silence_audio(self.config.mute_pkg_duration_ms)
         self.ten_env.log_debug("finalize mute pkg completed")
 
     async def _handle_reconnect(self):
@@ -514,7 +513,7 @@ class AzureASRExtension(AsyncASRBaseExtension):
         buf = frame.lock_buf()
         if self.audio_dumper:
             await self.audio_dumper.push_bytes(bytes(buf))
-        self.timeline.add_user_audio(
+        self.audio_timeline.add_user_audio(
             int(len(buf) / (self.config.sample_rate / 1000 * 2))
         )
         self.stream.write(bytes(buf))

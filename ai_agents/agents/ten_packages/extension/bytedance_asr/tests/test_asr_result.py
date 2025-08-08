@@ -6,8 +6,6 @@
 #
 import asyncio
 import json
-import os
-import threading
 from time import sleep
 import time
 from types import SimpleNamespace

@@ -3,7 +3,6 @@ import os
 from datetime import datetime
 from typing import Any
 from typing_extensions import override
-from pydantic import BaseModel, Field
 from ten_ai_base.asr import (
     AsyncASRBaseExtension,
     ASRBufferConfig,
@@ -12,24 +11,18 @@ from ten_ai_base.asr import (
 )
 from ten_ai_base.dumper import Dumper
 from ten_ai_base.message import (
-    ErrorMessage,
     ModuleType,
     ModuleError,
     ModuleErrorVendorInfo,
     ModuleErrorCode,
 )
-from ten_ai_base.transcription import UserTranscription
 
-# from ten_ai_base.struct import ASRResult, ASRWord
-from ten_ai_base.utils import encrypt
-from ten_ai_base.timeline import AudioTimeline
 from ten_runtime import (
     AsyncTenEnv,
     Cmd,
     AudioFrame,
     StatusCode,
     CmdResult,
-    ten_env,
 )
 from .bytedance_asr import AsrWsClient
 from .config import BytedanceASRConfig
@@ -37,11 +30,9 @@ from .const import (
     FINALIZE_MODE_DISCONNECT,
     FINALIZE_MODE_MUTE_PKG,
     DUMP_FILE_NAME,
-    MODULE_NAME_ASR,
     BYTEDANCE_ERROR_CODES,
     RECONNECTABLE_ERROR_CODES,
     FATAL_ERROR_CODES,
-    DEFAULT_WORKFLOW,
 )
 
 
@@ -53,10 +44,9 @@ class BytedanceASRExtension(AsyncASRBaseExtension):
         self.connected: bool = False
         self.client: AsrWsClient | None = None
         self.config: BytedanceASRConfig | None = None
-        self.timeline: AudioTimeline = AudioTimeline()
         self.last_finalize_timestamp: int = 0
         self.audio_dumper: Dumper | None = None
-        self.ten_env: Any | None = None
+        self.ten_env: AsyncTenEnv = None  # type: ignore
 
         # Reconnection parameters (will be set from config)
         self.max_retries: int = 5
@@ -91,13 +81,11 @@ class BytedanceASRExtension(AsyncASRBaseExtension):
             self.base_delay = self.config.base_delay
 
             if self.config.dump:
-                dump_file_path = os.path.join(
-                    self.config.dump_path, DUMP_FILE_NAME
-                )
+                dump_file_path = os.path.join(self.config.dump_path, DUMP_FILE_NAME)
                 self.audio_dumper = Dumper(dump_file_path)
                 await self.audio_dumper.start()
 
-            self.timeline.reset()
+            self.audio_timeline.reset()
             self.last_finalize_timestamp = 0
         except Exception as e:
             ten_env.log_error(f"invalid property: {e}")
@@ -116,7 +104,7 @@ class BytedanceASRExtension(AsyncASRBaseExtension):
             )
 
     async def on_cmd(self, ten_env: AsyncTenEnv, cmd: Cmd) -> None:
-        cmd_json = cmd.to_json()
+        cmd_json, _ = cmd.get_property_to_json()
         ten_env.log_info(f"on_cmd json: {cmd_json}")
 
         cmd_result = CmdResult.create(StatusCode.OK, cmd)
@@ -151,9 +139,7 @@ class BytedanceASRExtension(AsyncASRBaseExtension):
             await self.stop_connection()
             await self.start_connection()
             # Don't reset retry count here, wait for non-1001 error codes or normal messages
-            env.log_info(
-                "=== Reconnection established, waiting for validation ==="
-            )
+            env.log_info("=== Reconnection established, waiting for validation ===")
         except Exception as e:
             env.log_error(
                 f"=== Reconnection failed === Attempt {self.attempts} failed: {e}"
@@ -169,9 +155,7 @@ class BytedanceASRExtension(AsyncASRBaseExtension):
 
     async def on_finalize_complete_callback(self) -> None:
         """Callback function when ASR finalize is completed."""
-        self.ten_env.log_info(
-            "ASR finalize completed, sending finalize end signal"
-        )
+        self.ten_env.log_info("ASR finalize completed, sending finalize end signal")
         try:
             await self.send_asr_finalize_end()
             self.ten_env.log_info("Sent asr_finalize_end signal from callback")
@@ -199,11 +183,7 @@ class BytedanceASRExtension(AsyncASRBaseExtension):
 
         async def on_message(result):
             # self.ten_env.log_info(f"on_message result: {result}")
-            if (
-                not result
-                or "text" not in result[0]
-                or "utterances" not in result[0]
-            ):
+            if not result or "text" not in result[0] or "utterances" not in result[0]:
                 return
 
             sentence = result[0]["text"]
@@ -291,8 +271,7 @@ class BytedanceASRExtension(AsyncASRBaseExtension):
                 asyncio.create_task(self._handle_reconnect(self.ten_env))
             # Reset retry count for success codes and non-fatal errors
             elif error_code in [1000, 0] or (
-                error_code not in RECONNECTABLE_ERROR_CODES
-                and error_code < 2000
+                error_code not in RECONNECTABLE_ERROR_CODES and error_code < 2000
             ):
                 if self.attempts > 0:
                     self.ten_env.log_info(
@@ -370,9 +349,7 @@ class BytedanceASRExtension(AsyncASRBaseExtension):
         self.last_fatal_error = None
 
     @override
-    async def send_audio(
-        self, frame: AudioFrame, session_id: str | None
-    ) -> bool:
+    async def send_audio(self, frame: AudioFrame, session_id: str | None) -> bool:
         # Check if connection is closed due to fatal error
         if self.last_fatal_error:
             self.ten_env.log_info(
@@ -387,7 +364,7 @@ class BytedanceASRExtension(AsyncASRBaseExtension):
                 audio_data = bytes(buf)
                 await self.audio_dumper.push_bytes(audio_data)
 
-            self.timeline.add_user_audio(
+            self.audio_timeline.add_user_audio(
                 int(len(buf) / (self.input_audio_sample_rate() / 1000 * 2))
             )
             if self.client:
@@ -417,31 +394,23 @@ class BytedanceASRExtension(AsyncASRBaseExtension):
             finalize_timeout = self.config.finalize_timeout
 
             # Wait for final result or timeout
-            finalize_success = await self.client.wait_for_finalize(
-                finalize_timeout
-            )
+            finalize_success = await self.client.wait_for_finalize(finalize_timeout)
 
             if finalize_success:
                 self.ten_env.log_info("ASR finalize completed successfully")
             else:
-                self.ten_env.log_warn(
-                    "ASR finalize timeout, proceeding with cleanup"
-                )
+                self.ten_env.log_warn("ASR finalize timeout, proceeding with cleanup")
 
             # Send finalize_end signal regardless of timeout
             try:
                 await self.send_asr_finalize_end()
                 self.ten_env.log_info("Sent asr_finalize_end signal")
             except Exception as e:
-                self.ten_env.log_error(
-                    f"Error sending asr_finalize_end signal: {e}"
-                )
+                self.ten_env.log_error(f"Error sending asr_finalize_end signal: {e}")
 
             # Handle connection based on finalize_mode
             if self.config.finalize_mode == FINALIZE_MODE_DISCONNECT:
-                self.ten_env.log_info(
-                    "Disconnecting ASR client due to finalize mode"
-                )
+                self.ten_env.log_info("Disconnecting ASR client due to finalize mode")
                 await self.stop_connection()
             elif self.config.finalize_mode == FINALIZE_MODE_MUTE_PKG:
                 self.ten_env.log_info(

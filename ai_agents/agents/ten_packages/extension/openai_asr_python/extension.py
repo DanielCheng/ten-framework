@@ -31,7 +31,6 @@ from .openai_asr_client import (
     Session,
 )
 from .config import OpenAIASRConfig
-from ten_ai_base.timeline import AudioTimeline
 from ten_ai_base.dumper import Dumper
 
 class OpenAIASRExtension(AsyncASRBaseExtension, AsyncOpenAIAsrListener):
@@ -39,7 +38,6 @@ class OpenAIASRExtension(AsyncASRBaseExtension, AsyncOpenAIAsrListener):
         super().__init__(name)
         self.client: OpenAIAsrClient | None = None
         self.config: OpenAIASRConfig | None = None
-        self.timeline: AudioTimeline = AudioTimeline()
         self.sent_user_audio_duration_ms_before_last_reset: int = 0
         self.last_finalize_timestamp: int = 0
         self.audio_dumper: Dumper | None = None
@@ -93,7 +91,7 @@ class OpenAIASRExtension(AsyncASRBaseExtension, AsyncOpenAIAsrListener):
                 log_path=log_path,
             )
             ten_env.log_info("OpenAI ASR client started")
-            self.timeline.reset()
+            self.audio_timeline.reset()
             self.sent_user_audio_duration_ms_before_last_reset = 0
             self.last_finalize_timestamp = 0
         except Exception as e:
@@ -138,7 +136,7 @@ class OpenAIASRExtension(AsyncASRBaseExtension, AsyncOpenAIAsrListener):
             buf = frame.lock_buf()
             if self.audio_dumper:
                 await self.audio_dumper.push_bytes(bytes(buf))
-            self.timeline.add_user_audio(
+            self.audio_timeline.add_user_audio(
                 int(len(buf) / (self.input_audio_sample_rate() / 1000 * 2))
             )
             await self.client.send_pcm_data(bytes(buf))
@@ -208,7 +206,7 @@ class OpenAIASRExtension(AsyncASRBaseExtension, AsyncOpenAIAsrListener):
             "de": "de-DE"
         }
 
-        return language_to_iso_639_1.get(language, language)
+        return language_to_iso_639_1.get(language, language) or "en-US"
 
     @override
     async def on_asr_delta(self, response: TranscriptionResultDelta):

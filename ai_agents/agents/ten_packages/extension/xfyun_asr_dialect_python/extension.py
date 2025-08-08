@@ -1,7 +1,5 @@
 from datetime import datetime
-import json
 import os
-import asyncio
 from typing import Optional, Dict, Any
 
 from typing_extensions import override
@@ -16,14 +14,17 @@ from ten_ai_base.asr import (
     ASRResult,
     AsyncASRBaseExtension,
 )
-from ten_ai_base.message import ModuleError, ModuleErrorVendorInfo, ModuleErrorCode
+from ten_ai_base.message import (
+    ModuleError,
+    ModuleErrorVendorInfo,
+    ModuleErrorCode,
+)
 from ten_runtime import (
     AsyncTenEnv,
     AudioFrame,
 )
 
 from ten_ai_base.dumper import Dumper
-from ten_ai_base.timeline import AudioTimeline
 from .reconnect_manager import ReconnectManager
 from .recognition import XfyunWSRecognition, XfyunWSRecognitionCallback
 from .config import XfyunDialectASRConfig
@@ -64,13 +65,14 @@ class XfyunDialectASRExtension(AsyncASRBaseExtension):
         self.recognition: Optional[XfyunWSRecognition] = None
         self.config: Optional[XfyunDialectASRConfig] = None
         self.audio_dumper: Optional[Dumper] = None
-        self.timeline: AudioTimeline = AudioTimeline()
         self.sent_user_audio_duration_ms_before_last_reset: int = 0
         self.last_finalize_timestamp: int = 0
         self.is_finalize_disconnect: bool = False
 
         # WPGS mode status variables
-        self.wpgs_buffer: Dict[int, Dict[str, Any]] = {}  # Mapping from sequence number to data including text, bg, ed
+        self.wpgs_buffer: Dict[int, Dict[str, Any]] = (
+            {}
+        )  # Mapping from sequence number to data including text, bg, ed
 
         # Reconnection manager
         self.reconnect_manager: Optional[ReconnectManager] = None
@@ -106,7 +108,8 @@ class XfyunDialectASRExtension(AsyncASRBaseExtension):
             )
             if self.config.dump:
                 dump_file_path = os.path.join(
-                    self.config.dump_path, DUMP_FILE_NAME)
+                    self.config.dump_path, DUMP_FILE_NAME
+                )
                 self.audio_dumper = Dumper(dump_file_path)
 
         except Exception as e:
@@ -129,7 +132,9 @@ class XfyunDialectASRExtension(AsyncASRBaseExtension):
         try:
             # Check required credentials for new API
             if not self.config.app_id or self.config.app_id.strip() == "":
-                error_msg = "Xfyun App ID is required but not provided or is empty"
+                error_msg = (
+                    "Xfyun App ID is required but not provided or is empty"
+                )
                 self.ten_env.log_error(error_msg)
                 await self.send_asr_error(
                     ModuleError(
@@ -140,7 +145,10 @@ class XfyunDialectASRExtension(AsyncASRBaseExtension):
                 )
                 return
 
-            if not self.config.access_key_id or self.config.access_key_id.strip() == "":
+            if (
+                not self.config.access_key_id
+                or self.config.access_key_id.strip() == ""
+            ):
                 error_msg = "Xfyun Access Key ID is required but not provided or is empty"
                 self.ten_env.log_error(error_msg)
                 await self.send_asr_error(
@@ -152,7 +160,10 @@ class XfyunDialectASRExtension(AsyncASRBaseExtension):
                 )
                 return
 
-            if not self.config.access_key_secret or self.config.access_key_secret.strip() == "":
+            if (
+                not self.config.access_key_secret
+                or self.config.access_key_secret.strip() == ""
+            ):
                 error_msg = "Xfyun Access Key Secret is required but not provided or is empty"
                 self.ten_env.log_error(error_msg)
                 await self.send_asr_error(
@@ -195,14 +206,16 @@ class XfyunDialectASRExtension(AsyncASRBaseExtension):
                 access_key_secret=self.config.access_key_secret,
                 ten_env=self.ten_env,
                 config=xfyun_config,
-                callback=self.recognition_callback
+                callback=self.recognition_callback,
             )
 
             # Start recognition
             success = await self.recognition.start()
             if success:
                 self.is_finalize_disconnect = False
-                self.ten_env.log_info("Xfyun ASR connection started successfully")
+                self.ten_env.log_info(
+                    "Xfyun ASR connection started successfully"
+                )
             else:
                 error_msg = "Failed to start Xfyun ASR connection"
                 self.ten_env.log_error(error_msg)
@@ -215,8 +228,7 @@ class XfyunDialectASRExtension(AsyncASRBaseExtension):
                 )
 
         except Exception as e:
-            self.ten_env.log_error(
-                f"Failed to start Xfyun ASR connection: {e}")
+            self.ten_env.log_error(f"Failed to start Xfyun ASR connection: {e}")
             await self.send_asr_error(
                 ModuleError(
                     module=MODULE_NAME_ASR,
@@ -236,9 +248,9 @@ class XfyunDialectASRExtension(AsyncASRBaseExtension):
 
         # Reset timeline and audio duration
         self.sent_user_audio_duration_ms_before_last_reset += (
-            self.timeline.get_total_user_audio_duration()
+            self.audio_timeline.get_total_user_audio_duration()
         )
-        self.timeline.reset()
+        self.audio_timeline.reset()
 
         # Reset audio buffer
         if self.audio_buffer_manager:
@@ -263,8 +275,10 @@ class XfyunDialectASRExtension(AsyncASRBaseExtension):
 
             # Get timing information
             start_ms = st_data.get("bg", 0)  # Sentence start time, ms
-            end_ms = st_data.get("ed", 0)    # Sentence end time, ms
-            result_type = st_data.get("type", "1")  # 0=final result, 1=intermediate result
+            end_ms = st_data.get("ed", 0)  # Sentence end time, ms
+            result_type = st_data.get(
+                "type", "1"
+            )  # 0=final result, 1=intermediate result
 
             # Extract text from recognition results
             rt_data = st_data.get("rt", [])
@@ -277,7 +291,7 @@ class XfyunDialectASRExtension(AsyncASRBaseExtension):
                         result += cw.get("w", "")
 
             # Determine if this is a final result
-            is_final = (result_type == "0")  # Type 0 means final result
+            is_final = result_type == "0"  # Type 0 means final result
 
             # Calculate duration
             duration_ms = end_ms - start_ms if end_ms > start_ms else 0
@@ -288,7 +302,7 @@ class XfyunDialectASRExtension(AsyncASRBaseExtension):
 
             # If no valid timestamps, use timeline to estimate
             actual_start_ms = int(
-                self.timeline.get_audio_duration_before_time(start_ms)
+                self.audio_timeline.get_audio_duration_before_time(start_ms)
                 + self.sent_user_audio_duration_ms_before_last_reset
             )
 
@@ -307,14 +321,19 @@ class XfyunDialectASRExtension(AsyncASRBaseExtension):
                 )
             else:
                 self.ten_env.log_error(
-                    "Cannot handle ASR result: config is None")
+                    "Cannot handle ASR result: config is None"
+                )
 
         except Exception as e:
             self.ten_env.log_error(f"Error processing Xfyun ASR result: {e}")
 
-    async def on_asr_error(self, error_msg: str, error_code: Optional[int] = None) -> None:
+    async def on_asr_error(
+        self, error_msg: str, error_code: Optional[int] = None
+    ) -> None:
         """Handle error callback"""
-        self.ten_env.log_error(f"Xfyun ASR error: {error_msg} code: {error_code}")
+        self.ten_env.log_error(
+            f"Xfyun ASR error: {error_msg} code: {error_code}"
+        )
         await self._handle_reconnect()
 
         # Send error information
@@ -341,9 +360,9 @@ class XfyunDialectASRExtension(AsyncASRBaseExtension):
 
         if self.is_finalize_disconnect:
             self.ten_env.log_warn(
-                "Xfyun ASR connection closed unexpectedly. Reconnecting...")
+                "Xfyun ASR connection closed unexpectedly. Reconnecting..."
+            )
             await self._handle_reconnect()
-
 
     @override
     async def finalize(self, session_id: str | None) -> None:
@@ -352,22 +371,25 @@ class XfyunDialectASRExtension(AsyncASRBaseExtension):
 
         self.last_finalize_timestamp = int(datetime.now().timestamp() * 1000)
         self.ten_env.log_debug(
-            f"Xfyun ASR finalize start at {self.last_finalize_timestamp}")
+            f"Xfyun ASR finalize start at {self.last_finalize_timestamp}"
+        )
 
         # Flush audio buffer before finalizing
         if self.audio_buffer_manager and self.recognition:
-            await self.audio_buffer_manager.flush(self.recognition.send_audio_frame)
+            await self.audio_buffer_manager.flush(
+                self.recognition.send_audio_frame
+            )
             self.ten_env.log_debug("Flushed audio buffer during finalization")
 
         await self._handle_finalize_disconnect()
 
     async def _handle_asr_result(
-            self,
-            text: str,
-            final: bool,
-            start_ms: int = 0,
-            duration_ms: int = 0,
-            language: str = "",
+        self,
+        text: str,
+        final: bool,
+        start_ms: int = 0,
+        duration_ms: int = 0,
+        language: str = "",
     ):
         """Process ASR recognition result"""
         assert self.config is not None
@@ -381,6 +403,7 @@ class XfyunDialectASRExtension(AsyncASRBaseExtension):
             start_ms=start_ms,
             duration_ms=duration_ms,
             language=language,
+            words=[],
         )
 
         await self.send_asr_result(asr_result)
@@ -413,16 +436,18 @@ class XfyunDialectASRExtension(AsyncASRBaseExtension):
         # Attempt reconnection
         success = await self.reconnect_manager.handle_reconnect(
             connection_func=self.start_connection,
-            error_handler=self.send_asr_error
+            error_handler=self.send_asr_error,
         )
 
         if success:
             self.ten_env.log_debug(
-                "Reconnection attempt initiated successfully")
+                "Reconnection attempt initiated successfully"
+            )
         else:
             info = self.reconnect_manager.get_attempts_info()
             self.ten_env.log_debug(
-                f"Reconnection attempt failed. Status: {info}")
+                f"Reconnection attempt failed. Status: {info}"
+            )
 
     async def _finalize_end(self) -> None:
         """Handle finalization end logic"""
@@ -450,16 +475,17 @@ class XfyunDialectASRExtension(AsyncASRBaseExtension):
                 await self.audio_dumper.stop()
 
         except Exception as e:
-            self.ten_env.log_error(
-                f"Error stopping Xfyun ASR connection: {e}")
+            self.ten_env.log_error(f"Error stopping Xfyun ASR connection: {e}")
 
     @override
     def is_connected(self) -> bool:
         """Check connection status"""
-        is_connected: bool = (self.connected and
-                       self.recognition is not None and
-                       self.recognition.is_connected() and
-                       not self.is_finalize_disconnect)
+        is_connected: bool = (
+            self.connected
+            and self.recognition is not None
+            and self.recognition.is_connected()
+            and not self.is_finalize_disconnect
+        )
         # self.ten_env.log_debug(f"Xfyun ASR is_connected: {is_connected}")
         return is_connected
 
@@ -475,7 +501,9 @@ class XfyunDialectASRExtension(AsyncASRBaseExtension):
         return self.config.samplerate
 
     @override
-    async def send_audio(self, frame: AudioFrame, session_id: str | None) -> bool:
+    async def send_audio(
+        self, frame: AudioFrame, session_id: str | None
+    ) -> bool:
         """Send audio data"""
         assert self.config is not None
 
@@ -491,10 +519,9 @@ class XfyunDialectASRExtension(AsyncASRBaseExtension):
                 await self.audio_dumper.push_bytes(audio_data)
 
             # Update timeline
-            self.timeline.add_user_audio(
+            self.audio_timeline.add_user_audio(
                 int(len(audio_data) / (self.config.samplerate / 1000 * 2))
             )
-
 
             # Use audio buffer manager to handle audio data
             if self.audio_buffer_manager:
@@ -504,7 +531,7 @@ class XfyunDialectASRExtension(AsyncASRBaseExtension):
                 await self.audio_buffer_manager.push_audio(
                     audio_data=audio_data,
                     send_callback=self.recognition.send_audio_frame,
-                    force_send=force_send
+                    force_send=force_send,
                 )
             else:
                 # Fallback to direct sending if buffer manager is not available

@@ -1,4 +1,3 @@
-import json
 from typing import Dict, Any
 from pydantic import BaseModel, Field
 from ten_ai_base.utils import encrypt
@@ -6,11 +5,12 @@ from ten_ai_base.utils import encrypt
 
 class XfyunASRConfig(BaseModel):
     """Xfyun ASR Bigmodel Configuration"""
+
     app_id: str = ""
     api_key: str = ""
     api_secret: str = ""
-    lang: str = "zh_cn" # ten use language, zh_cn, en_us
-    language: str = "mix" # api use language zh_cn support zh, en,
+    lang: str = "zh_cn"  # ten use language, zh_cn, en_us
+    language: str = "mix"  # api use language zh_cn support zh, en,
     aue: str = "raw"
     accent: str = "mandarin"
     domain: str = "ist_cbm_mix"

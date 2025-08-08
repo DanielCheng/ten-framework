@@ -1,4 +1,4 @@
-from typing import Callable, Optional, Any, List, Awaitable, Union
+from typing import Callable, Any, Awaitable, Union
 import asyncio
 
 
@@ -90,7 +90,10 @@ class AudioBufferManager:
 
         return False
 
-    async def flush(self, send_callback: Union[Callable[[bytes], Any], Callable[[bytes], Awaitable[Any]]]) -> bool:
+    async def flush(
+        self,
+        send_callback: Union[Callable[[bytes], Any], Callable[[bytes], Awaitable[Any]]],
+    ) -> bool:
         """
         Flush buffer and send all data.
 

@@ -11,7 +11,7 @@
     {
       "type": "system",
       "name": "ten_ai_base",
-      "version": "=0.6.25"
+      "version": "=0.6.26"
     }
   ],
   "api": {
@@ -25,8 +25,11 @@
         "api_key": {
           "type": "string"
         },
-        "model": {
-          "type": "string"
+        "language_hints": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         },
         "language": {
           "type": "string"

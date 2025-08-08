@@ -7,8 +7,14 @@
 import asyncio
 import json
 
-from ten_runtime import (AsyncExtensionTester, AsyncTenEnvTester, AudioFrame,
-                         Data, TenError, TenErrorCode)
+from ten_runtime import (
+    AsyncExtensionTester,
+    AsyncTenEnvTester,
+    AudioFrame,
+    Data,
+    TenError,
+    TenErrorCode,
+)
 from typing_extensions import override
 
 from .mock import patch_soniox_ws  # noqa: F401
@@ -40,9 +46,7 @@ class SonioxAsrVendorErrorTester(AsyncExtensionTester):
 
     @override
     async def on_start(self, ten_env_tester: AsyncTenEnvTester) -> None:
-        self.sender_task = asyncio.create_task(
-            self.audio_sender(ten_env_tester)
-        )
+        self.sender_task = asyncio.create_task(self.audio_sender(ten_env_tester))
 
     def stop_test_if_checking_failed(
         self,
@@ -58,9 +62,7 @@ class SonioxAsrVendorErrorTester(AsyncExtensionTester):
             ten_env_tester.stop_test(err)
 
     @override
-    async def on_data(
-        self, ten_env_tester: AsyncTenEnvTester, data: Data
-    ) -> None:
+    async def on_data(self, ten_env_tester: AsyncTenEnvTester, data: Data) -> None:
         ten_env_tester.log_info(f"tester on_data, data: {data}")
         data_name = data.get_name()
 
@@ -96,9 +98,8 @@ class SonioxAsrVendorErrorTester(AsyncExtensionTester):
                 if isinstance(vendor_info, dict):
                     self.stop_test_if_checking_failed(
                         ten_env_tester,
-                        "error_type" in vendor_info
-                        or "error_code" in vendor_info,
-                        f"vendor_info should contain error_type or error_code: {vendor_info}",
+                        "code" in vendor_info and "message" in vendor_info,
+                        f"vendor_info should contain code and message: {vendor_info}",
                     )
 
             # Test passed - we received the expected vendor error
@@ -156,7 +157,7 @@ def test_vendor_authentication_error(patch_soniox_ws):
     tester = SonioxAsrVendorErrorTester()
     tester.set_test_mode_single("soniox_asr_python", json.dumps(property_json))
     err = tester.run()
-    assert err is None, f"test_vendor_authentication_error err: {err}"
+    assert err is None, f"test_vendor_authentication_error err: {err.error_message()}"
 
 
 def test_vendor_quota_exceeded_error(patch_soniox_ws):
@@ -200,7 +201,7 @@ def test_vendor_quota_exceeded_error(patch_soniox_ws):
     tester = SonioxAsrVendorErrorTester()
     tester.set_test_mode_single("soniox_asr_python", json.dumps(property_json))
     err = tester.run()
-    assert err is None, f"test_vendor_quota_exceeded_error err: {err}"
+    assert err is None, f"test_vendor_quota_exceeded_error err: {err.error_message()}"
 
 
 def test_vendor_unsupported_format_error(patch_soniox_ws):
@@ -244,7 +245,9 @@ def test_vendor_unsupported_format_error(patch_soniox_ws):
     tester = SonioxAsrVendorErrorTester()
     tester.set_test_mode_single("soniox_asr_python", json.dumps(property_json))
     err = tester.run()
-    assert err is None, f"test_vendor_unsupported_format_error err: {err}"
+    assert (
+        err is None
+    ), f"test_vendor_unsupported_format_error err: {err.error_message()}"
 
 
 def test_vendor_service_unavailable_error(patch_soniox_ws):
@@ -286,4 +289,6 @@ def test_vendor_service_unavailable_error(patch_soniox_ws):
     tester = SonioxAsrVendorErrorTester()
     tester.set_test_mode_single("soniox_asr_python", json.dumps(property_json))
     err = tester.run()
-    assert err is None, f"test_vendor_service_unavailable_error err: {err}"
+    assert (
+        err is None
+    ), f"test_vendor_service_unavailable_error err: {err.error_message()}"

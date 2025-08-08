@@ -26,7 +26,6 @@ class AliyunASRBigmodelConfig(BaseModel):
     mute_pkg_duration_ms: int = 1000  # must be greater than max_sentence_silence
     dump: bool = False
     dump_path: str = "/tmp"
-    advanced_params_json: str = ""
     params: Dict[str, Any] = Field(default_factory=dict)
 
     def update(self, params: Dict[str, Any]) -> None:

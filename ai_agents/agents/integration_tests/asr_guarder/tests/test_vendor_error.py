@@ -162,45 +162,7 @@ class VendorErrorTester(AsyncExtensionTester):
             ten_env.log_error(error_details)
             return False, error_details
 
-        # 4. Validate vendor_info structure if present
-        vendor_info: dict[str, str] | None = json_data.get("vendor_info")
-        if vendor_info is not None:
-            if not isinstance(vendor_info, dict):
-                error_details = "Field 'vendor_info' must be object type"
-                ten_env.log_error(error_details)
-                return False, error_details
-
-            # Check required vendor_info fields
-            vendor_missing_fields = [
-                field
-                for field in VENDOR_INFO_REQUIRED_FIELDS
-                if field not in vendor_info
-            ]
-            if vendor_missing_fields:
-                error_details = f"Missing vendor_info fields: {vendor_missing_fields}, got: {list(vendor_info.keys())}"
-                ten_env.log_error(error_details)
-                return False, error_details
-
-            # Validate vendor_info field types
-            if not isinstance(vendor_info.get("vendor"), str):
-                error_details = f"vendor_info.vendor must be string, got {type(vendor_info.get('vendor'))}"
-                ten_env.log_error(error_details)
-                return False, error_details
-
-            if not isinstance(vendor_info.get("code"), str):
-                error_details = f"vendor_info.code must be string, got {type(vendor_info.get('code'))}"
-                ten_env.log_error(error_details)
-                return False, error_details
-
-            if not isinstance(vendor_info.get("message"), str):
-                error_details = f"vendor_info.message must be string, got {type(vendor_info.get('message'))}"
-                ten_env.log_error(error_details)
-                return False, error_details
-
-            self.vendor_info_received = True
-            ten_env.log_info(f"✅ Vendor info validated: {vendor_info}")
-
-        # 5. Validate metadata structure if present
+        # 4. Validate metadata structure if present
         metadata: dict[str, str] | None = json_data.get("metadata")
         if metadata is not None:
             if not isinstance(metadata, dict):

@@ -1,13 +1,6 @@
-CMD_IN_EVENT = "ten_event"
-EVENTTYPE_START = "start"
-CMD_PROPERTY_TASK_INFO = "taskInfo"
-CMD_PROPERTY_PAYLOAD = "payload"
 FINALIZE_MODE_DISCONNECT = "disconnect"
 FINALIZE_MODE_MUTE_PKG = "mute_pkg"
 DUMP_FILE_NAME = "bytedance_asr_in.pcm"
-STREAM_ID = "stream_id"
-REMOTE_USER_ID = "remote_user_id"
-MODULE_NAME_ASR = "asr"
 
 # Bytedance ASR Error Codes
 # Reference: https://www.volcengine.com/docs/6561/80818#_3-3-%E9%94%99%E8%AF%AF%E7%A0%81

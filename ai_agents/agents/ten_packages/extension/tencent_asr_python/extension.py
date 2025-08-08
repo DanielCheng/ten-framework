@@ -26,8 +26,8 @@ from .tencent_asr_client import (
     RecoginizeResult,
 )
 from .config import TencentASRConfig
-from ten_ai_base.timeline import AudioTimeline
 from ten_ai_base.dumper import Dumper
+
 
 class TencentASRExtension(AsyncASRBaseExtension, AsyncTencentAsrListener):
     def __init__(self, name: str):
@@ -35,7 +35,6 @@ class TencentASRExtension(AsyncASRBaseExtension, AsyncTencentAsrListener):
         self.client: TencentAsrClient | None = None
         self.listener: AsyncTencentAsrListener | None = None
         self.config: TencentASRConfig | None = None
-        self.timeline: AudioTimeline = AudioTimeline()
         self.sent_user_audio_duration_ms_before_last_reset: int = 0
         self.last_finalize_timestamp: int = 0
         self.audio_dumper: Dumper | None = None
@@ -88,7 +87,7 @@ class TencentASRExtension(AsyncASRBaseExtension, AsyncTencentAsrListener):
                 log_path=log_path,
             )
             ten_env.log_info("Tencent ASR client started")
-            self.timeline.reset()
+            self.audio_timeline.reset()
             self.sent_user_audio_duration_ms_before_last_reset = 0
             self.last_finalize_timestamp = 0
         except Exception as e:
@@ -138,7 +137,7 @@ class TencentASRExtension(AsyncASRBaseExtension, AsyncTencentAsrListener):
             buf = frame.lock_buf()
             if self.audio_dumper:
                 await self.audio_dumper.push_bytes(bytes(buf))
-            self.timeline.add_user_audio(
+            self.audio_timeline.add_user_audio(
                 int(len(buf) / (self.input_audio_sample_rate() / 1000 * 2))
             )
             await self.client.send_pcm_data(bytes(buf))
@@ -173,7 +172,7 @@ class TencentASRExtension(AsyncASRBaseExtension, AsyncTencentAsrListener):
             )
             frame = bytearray(empty_audio_bytes_len)
             await self.client.send_pcm_data(bytes(frame))
-            self.timeline.add_silence_audio(self.config.mute_pkg_duration_ms)
+            self.audio_timeline.add_silence_audio(self.config.mute_pkg_duration_ms)
         else:
             _ = self.ten_env.log_error(
                 f"Unknown finalize mode: {self.config.finalize_mode}"
@@ -249,7 +248,10 @@ class TencentASRExtension(AsyncASRBaseExtension, AsyncTencentAsrListener):
     async def _handle_asr_result(
         self, result: RecoginizeResult, message_id: str | None = None
     ):
-        if self.last_finalize_timestamp != 0 and result.slice_type == RecoginizeResult.SliceType.END:
+        if (
+            self.last_finalize_timestamp != 0
+            and result.slice_type == RecoginizeResult.SliceType.END
+        ):
             timestamp = int(time.time() * 1000)
             latency = timestamp - self.last_finalize_timestamp
             self.ten_env.log_debug(
@@ -260,7 +262,7 @@ class TencentASRExtension(AsyncASRBaseExtension, AsyncTencentAsrListener):
 
         duration_ms = result.end_time - result.start_time
         actual_start_ms = (
-            self.timeline.get_audio_duration_before_time(result.start_time)
+            self.audio_timeline.get_audio_duration_before_time(result.start_time)
             + self.sent_user_audio_duration_ms_before_last_reset
         )
 

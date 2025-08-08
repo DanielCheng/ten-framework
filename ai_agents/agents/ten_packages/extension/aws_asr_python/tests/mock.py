@@ -78,7 +78,8 @@ class MockOutputStream:
         # Create Alternative
         alternative = Alternative(
             transcript=" ".join(self.words[:self.current_index]),
-            items=[item]
+            items=[item],
+            entities=[]
         )
         
         # Create TranscriptResult
