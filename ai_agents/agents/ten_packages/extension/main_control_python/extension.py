@@ -158,7 +158,8 @@ class MainControlExtension(AsyncExtension):
         await _send_data(ten_env, "tts_text_input", "tts", {
             "request_id": request_id,
             "text": text,
-            "text_input_end": is_final
+            "text_input_end": is_final,
+            "metadata": self.current_metadata
         })
         ten_env.log_info(f"_send_to_tts: text {text} is_final {is_final}")
 
