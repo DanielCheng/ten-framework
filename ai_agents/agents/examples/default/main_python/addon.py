@@ -10,7 +10,7 @@ from ten_runtime import (
 )
 
 
-@register_addon_as_extension("main_control_python")
+@register_addon_as_extension("main_python")
 class MainControlExtensionAddon(Addon):
     def on_create_instance(self, ten_env: TenEnv, name: str, context) -> None:
         from .extension import MainControlExtension

@@ -120,5 +120,6 @@
   },
   "[python]": {
     "editor.defaultFormatter": "ms-python.black-formatter"
-  }
+  },
+  "cmake.sourceDirectory": "D:/dev/TEN-Agent/third_party/mbedtls"
 }

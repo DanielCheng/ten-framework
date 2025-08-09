@@ -1,6 +1,6 @@
 {
   "type": "extension",
-  "name": "main_control_python",
+  "name": "main_python",
   "version": "0.1.0",
   "dependencies": [
     {

@@ -4,7 +4,7 @@ A TEN Framework extension that serves as the central control logic for AI agent 
 
 ## Overview
 
-The `main_control_python` extension acts as the orchestrator for AI agent conversations, handling real-time speech processing, LLM interactions, and TTS output. It manages user session state and coordinates data flow between different components in the TEN Framework.
+The `main_python` extension acts as the orchestrator for AI agent conversations, handling real-time speech processing, LLM interactions, and TTS output. It manages user session state and coordinates data flow between different components in the TEN Framework.
 
 ## Features
 
@@ -85,7 +85,7 @@ The extension supports the following configuration options:
 The extension is part of the TEN Framework and can be installed through the TEN package manager:
 
 ```bash
-ten install main_control_python
+ten install main_python
 ```
 
 ### Integration
@@ -113,7 +113,7 @@ This extension is designed to work with other TEN Framework components:
 The extension uses the standard TEN Framework build system:
 
 ```bash
-ten build main_control_python
+ten build main_python
 ```
 
 ### Testing
@@ -121,7 +121,7 @@ ten build main_control_python
 Run the extension tests:
 
 ```bash
-ten test main_control_python
+ten test main_python
 ```
 
 ## Architecture
