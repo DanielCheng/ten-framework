@@ -26,9 +26,9 @@ tasks:
       - task: build-server
 
   use:
-    desc: use agent, default 'agents/examples/default'
+    desc: use agent, default 'agents/examples/voice-assistant'
     vars:
-      AGENT: '{{.AGENT| default "agents/examples/default"}}'
+      AGENT: '{{.AGENT| default "agents/examples/voice-assistant"}}'
     cmds:
       - ln -sf {{.USER_WORKING_DIR}}/{{.AGENT}}/manifest.json ./agents/
       - ln -sf {{.USER_WORKING_DIR}}/{{.AGENT}}/property.json ./agents/

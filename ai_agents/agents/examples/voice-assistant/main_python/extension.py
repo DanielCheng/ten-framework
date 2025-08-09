@@ -102,6 +102,10 @@ class MainControlExtension(AsyncExtension):
                         }
                         stream_id = int(event.metadata.get("session_id", "100"))
 
+                        if event.text == "":
+                            self.ten_env.log_info("[MainControlExtension] Empty ASR result, skipping")
+                            continue
+
                         if event.final or len(event.text) > 2:
                             await self._interrupt()
 

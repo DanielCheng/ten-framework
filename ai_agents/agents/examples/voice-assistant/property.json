@@ -75,7 +75,9 @@
               "name": "main_control",
               "addon": "main_python",
               "extension_group": "control",
-              "property": {}
+              "property": {
+                "greeting": "TEN Agent connected with Coze. How can I help you today?"
+              }
             },
             {
               "type": "extension",
@@ -96,12 +98,31 @@
             {
               "type": "extension",
               "name": "streamid_adapter",
-              "addon": "streamid_adapter"
+              "addon": "streamid_adapter",
+              "property": {}
             }
           ],
           "connections": [
             {
               "extension": "agora_rtc",
+              "cmd": [
+                {
+                  "name": "on_user_left",
+                  "dest": [
+                    {
+                      "extension": "main_control"
+                    }
+                  ]
+                },
+                {
+                  "name": "on_user_joined",
+                  "dest": [
+                    {
+                      "extension": "main_control"
+                    }
+                  ]
+                }
+              ],
               "audio_frame": [
                 {
                   "name": "pcm_frame",
@@ -114,50 +135,37 @@
               ]
             },
             {
-              "extension": "streamid_adapter",
-              "audio_frame": [
+              "extension": "message_collector",
+              "data": [
                 {
-                  "name": "pcm_frame",
+                  "name": "data",
                   "dest": [
                     {
-                      "extension": "stt"
+                      "extension": "agora_rtc"
                     }
                   ]
                 }
               ]
             },
             {
-              "extension": "main_control",
+              "extension": "weatherapi_tool_python",
               "cmd": [
                 {
-                  "name": "on_user_joined",
-                  "source": [
-                    {
-                      "extension": "agora_rtc"
-                    }
-                  ]
-                },
-                {
-                  "name": "on_user_left",
-                  "source": [
-                    {
-                      "extension": "agora_rtc"
-                    }
-                  ]
-                },
-                {
                   "name": "tool_register",
-                  "source": [
+                  "dest": [
                     {
-                      "extension": "weatherapi_tool_python"
+                      "extension": "main_control"
                     }
                   ]
                 }
-              ],
-              "data": [
+              ]
+            },
+            {
+              "extension": "streamid_adapter",
+              "audio_frame": [
                 {
-                  "name": "asr_result",
-                  "source": [
+                  "name": "pcm_frame",
+                  "dest": [
                     {
                       "extension": "stt"
                     }
@@ -179,13 +187,13 @@
               ]
             },
             {
-              "extension": "message_collector",
+              "extension": "stt",
               "data": [
                 {
-                  "name": "data",
+                  "name": "asr_result",
                   "dest": [
                     {
-                      "extension": "agora_rtc"
+                      "extension": "main_control"
                     }
                   ]
                 }
