@@ -33,23 +33,36 @@ class ToolRegisterEvent(AgentEventBase):
 
 # ==== DATA Events ====
 
-class MLLMRequestTranscriptEvent(AgentEventBase):
+class SessionReadyEvent(AgentEventBase):
+    """Event triggered when the session is ready."""
+    type: Literal["data"] = "data"
+    name: Literal["mllm_server_session_ready"] = "mllm_server_session_ready"
+    metadata: Dict[str, Any]
+
+class ServerInterruptEvent(AgentEventBase):
+    """Event triggered when the server is interrupted."""
+    type: Literal["data"] = "data"
+    name: Literal["mllm_server_interrupt"] = "mllm_server_interrupt"
+    metadata: Dict[str, Any]
+
+class InputTranscriptEvent(AgentEventBase):
     """Event triggered when MLLM request transcript is received (partial or final)."""
     type: Literal["data"] = "data"
-    name: Literal["mllm_request_transcript"] = "mllm_request_transcript"
+    name: Literal["mllm_server_input_transcript"] = "mllm_server_input_transcript"
     content: Optional[str] = None
     delta: Optional[str] = None
     final: bool
     metadata: Dict[str, Any]
 
 
-class MLLMResponseTranscriptEvent(AgentEventBase):
+class OutputTranscriptEvent(AgentEventBase):
     """Event triggered when LLM returns a streaming response."""
-    type: Literal["llm"] = "llm"
-    name: Literal["llm_response"] = "llm_response"
+    type: Literal["data"] = "data"
+    name: Literal["mllm_server_output_transcript"] = "mllm_server_output_transcript"
     delta: str
     content: str
     is_final: bool
+    metadata: Dict[str, Any]
 
 # ==== Unified Event Union ====
 
@@ -57,6 +70,8 @@ AgentEvent = Union[
     UserJoinedEvent,
     UserLeftEvent,
     ToolRegisterEvent,
-    MLLMRequestTranscriptEvent,
-    MLLMResponseTranscriptEvent
+    InputTranscriptEvent,
+    OutputTranscriptEvent,
+    SessionReadyEvent,
+    ServerInterruptEvent,
 ]

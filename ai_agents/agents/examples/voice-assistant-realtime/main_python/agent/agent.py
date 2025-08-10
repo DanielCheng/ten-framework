@@ -1,6 +1,6 @@
 import asyncio
-import json
-from ten_ai_base.struct import MLLMRequestTranscript, MLLMResponseTranscript
+from ten_ai_base.mllm import DATA_MLLM_OUT_INTERRUPTED, DATA_MLLM_OUT_REQUEST_TRANSCRIPT, DATA_MLLM_OUT_RESPONSE_TRANSCRIPT, DATA_MLLM_OUT_SESSION_READY
+from ten_ai_base.struct import MLLMServerInputTranscript, MLLMServerInterrupt, MLLMServerOutputTranscript, MLLMServerSessionReady
 from ten_runtime import AsyncTenEnv, Cmd, CmdResult, Data, StatusCode
 from ten_ai_base.types import LLMToolMetadata
 from .events import *
@@ -39,25 +39,35 @@ class Agent:
         data_name = data.get_name()
         self.ten_env.log_info(f"on_data: {data_name}")
         try:
-            if data_name == "mllm_request_transcript":
+            if data_name == DATA_MLLM_OUT_REQUEST_TRANSCRIPT:
                 transcript_json, _ = data.get_property_to_json(None)
-                transcript = MLLMRequestTranscript.model_validate_json(transcript_json)
-                event = MLLMRequestTranscriptEvent(
+                transcript = MLLMServerInputTranscript.model_validate_json(transcript_json)
+                event = InputTranscriptEvent(
                     delta=transcript.delta,
                     content=transcript.content,
                     metadata=transcript.metadata,
                     final=transcript.final,
                 )
                 await self.event_queue.put(event)
-            elif data_name == "mllm_response_transcript":
+            elif data_name == DATA_MLLM_OUT_RESPONSE_TRANSCRIPT:
                 response_json, _ = data.get_property_to_json(None)
-                response = MLLMResponseTranscript.model_validate_json(response_json)
-                event = MLLMResponseTranscriptEvent(
-                    delta=response.delta,
+                response = MLLMServerOutputTranscript.model_validate_json(response_json)
+                event = OutputTranscriptEvent(
+                    delta=response.delta or "",
                     content=response.content,
                     metadata=response.metadata,
                     is_final=response.final,
                 )
+                await self.event_queue.put(event)
+            elif data_name == DATA_MLLM_OUT_SESSION_READY:
+                session_json, _ = data.get_property_to_json(None)
+                session = MLLMServerSessionReady.model_validate_json(session_json)
+                event = SessionReadyEvent(metadata=session.metadata)
+                await self.event_queue.put(event)
+            elif data_name == DATA_MLLM_OUT_INTERRUPTED:
+                interrupt_json, _ = data.get_property_to_json(None)
+                interrupt = MLLMServerInterrupt.model_validate_json(interrupt_json)
+                event = ServerInterruptEvent(metadata=interrupt.metadata)
                 await self.event_queue.put(event)
             else:
                 self.ten_env.log_warn(f"Unhandled data: {data_name}")
@@ -68,15 +78,6 @@ class Agent:
     async def get_event(self) -> AgentEvent:
         return await self.event_queue.get()
 
-
-    async def register_llm_tool(self, tool: LLMToolMetadata, source: str):
-        """
-        Register tools with the LLM.
-        This method sends a command to register the provided tools.
-        """
-        pass
-        # await self.llm_exec.register_tool(tool, source)
-
     async def queue_llm_input(self, text: str):
         """
         Queue a new message to the LLM context.
@@ -84,14 +85,6 @@ class Agent:
         """
         pass
         # await self.llm_exec.queue_input(text)
-
-    async def flush_llm(self):
-        """
-        Flush the LLM input queue.
-        This will ensure that all queued inputs are processed.
-        """
-        pass
-        # await self.llm_exec.flush()
 
     async def stop(self):
         """

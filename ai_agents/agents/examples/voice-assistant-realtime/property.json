@@ -116,7 +116,7 @@
               "extension": "main_control",
               "data": [
                 {
-                  "name": "mllm_request_transcript",
+                  "name": "mllm_server_input_transcript",
                   "source": [
                     {
                       "extension": "v2v"
@@ -124,7 +124,23 @@
                   ]
                 },
                 {
-                  "name": "mllm_response_transcript",
+                  "name": "mllm_server_output_transcript",
+                  "source": [
+                    {
+                      "extension": "v2v"
+                    }
+                  ]
+                },
+                {
+                  "name": "mllm_server_session_ready",
+                  "source": [
+                    {
+                      "extension": "v2v"
+                    }
+                  ]
+                },
+                {
+                  "name": "mllm_server_interrupted",
                   "source": [
                     {
                       "extension": "v2v"
