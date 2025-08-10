@@ -146,6 +146,14 @@
                       "extension": "v2v"
                     }
                   ]
+                },
+                {
+                  "name": "mllm_server_function_call",
+                  "source": [
+                    {
+                      "extension": "v2v"
+                    }
+                  ]
                 }
               ]
             },

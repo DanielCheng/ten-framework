@@ -596,7 +596,7 @@ class ResponseOutputItemDone(ServerToClientMessage):
 class ItemInputAudioTranscriptionDelta(ServerToClientMessage):
     item_id: str  # The ID of the item for which transcription was completed
     content_index: int  # Index of the content part that was transcribed
-    transcript: str  # The transcribed text
+    delta: str  # The transcribed text
     type: str = (
         EventType.ITEM_INPUT_AUDIO_TRANSCRIPTION_DELTA
     )  # Fixed event type
@@ -898,8 +898,10 @@ def parse_server_message(unparsed_string: str) -> ServerToClientMessage:
         return from_dict(ItemInputAudioTranscriptionCompleted, data)
     elif data["type"] == EventType.ITEM_INPUT_AUDIO_TRANSCRIPTION_FAILED:
         return from_dict(ItemInputAudioTranscriptionFailed, data)
+    elif data["type"] == EventType.ITEM_INPUT_AUDIO_TRANSCRIPTION_DELTA:
+        return from_dict(ItemInputAudioTranscriptionDelta, data)
 
-    raise ValueError(f"Unknown message type: {data['type']}")
+    raise ValueError(f"Unknown message type: {data['type']} {data}")
 
 
 def to_json(obj: Union[ClientToServerMessage, ServerToClientMessage]) -> str:

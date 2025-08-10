@@ -1,9 +1,8 @@
 import asyncio
 import time
 
-from ten_ai_base.mllm import DATA_MLLM_IN_CREATE_RESPONSE, DATA_MLLM_IN_REGISTER_TOOL, DATA_MLLM_IN_SEND_MESSAGE_ITEM, DATA_MLLM_IN_SET_MESSAGE_CONTEXT
-from ten_ai_base.struct import MLLMClientCreateResponse, MLLMClientMessageItem, MLLMClientRegisterTool, MLLMClientSendMessageItem, MLLMClientSetMessageContext
-from ten_ai_base.types import LLMToolMetadata
+from ten_ai_base.mllm import DATA_MLLM_IN_CREATE_RESPONSE, DATA_MLLM_IN_SEND_MESSAGE_ITEM, DATA_MLLM_IN_SET_MESSAGE_CONTEXT
+from ten_ai_base.struct import MLLMClientCreateResponse, MLLMClientMessageItem, MLLMClientSendMessageItem, MLLMClientSetMessageContext
 from ten_runtime import (
     AsyncExtension,
     AsyncTenEnv,
@@ -13,6 +12,7 @@ from ten_runtime import (
 
 from .agent.agent import Agent
 from .agent.events import (
+    FunctionCallEvent,
     InputTranscriptEvent,
     OutputTranscriptEvent,
     ServerInterruptEvent,
@@ -97,7 +97,9 @@ class MainControlExtension(AsyncExtension):
                         self._rtc_user_count -= 1
 
                     case ToolRegisterEvent():
-                        await self._register_tool(event.tool, event.source)
+                        await self.agent.register_tool(event.tool, event.source)
+                    case FunctionCallEvent():
+                        await self.agent.call_tool(event.call_id, event.function_name, event.arguments)
                     case InputTranscriptEvent():
                         self.current_metadata = {
                             "session_id": event.metadata.get("session_id", "100"),
@@ -170,20 +172,6 @@ class MainControlExtension(AsyncExtension):
         )
         self.ten_env.log_info(f"[MainControlExtension] Sent transcript: {role}, final={final}, text={text}")
 
-
-    async def _register_tool(self, tool: LLMToolMetadata, source: str):
-        """
-        Register tools with the LLM.
-        This method sends a command to register the provided tools.
-        """
-        payload = MLLMClientRegisterTool(tool=tool).model_dump()
-        await _send_data(
-            self.ten_env,
-            DATA_MLLM_IN_REGISTER_TOOL,
-            "v2v",
-            payload,
-        )
-        self.ten_env.log_info(f"[MainControlExtension] Registered tools: {tool.name} from {source}")
 
     async def _set_context_messages(self, messages: list[MLLMClientMessageItem]):
         """

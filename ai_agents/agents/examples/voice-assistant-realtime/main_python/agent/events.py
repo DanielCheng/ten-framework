@@ -64,6 +64,14 @@ class OutputTranscriptEvent(AgentEventBase):
     is_final: bool
     metadata: Dict[str, Any]
 
+class FunctionCallEvent(AgentEventBase):
+    """Event triggered when a function call is made by the MLLM server."""
+    type: Literal["data"] = "data"
+    name: Literal["mllm_server_function_call"] = "mllm_server_function_call"
+    call_id: str
+    function_name: str
+    arguments: str
+
 # ==== Unified Event Union ====
 
 AgentEvent = Union[
@@ -74,4 +82,5 @@ AgentEvent = Union[
     OutputTranscriptEvent,
     SessionReadyEvent,
     ServerInterruptEvent,
+    FunctionCallEvent
 ]

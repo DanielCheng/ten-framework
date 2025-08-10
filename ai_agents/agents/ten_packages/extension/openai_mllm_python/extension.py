@@ -14,7 +14,7 @@ import time
 from typing import Iterable, Literal
 
 from ten_ai_base.mllm import AsyncMLLMBaseExtension
-from ten_ai_base.struct import MLLMClientMessageItem, MLLMServerInputTranscript, MLLMServerInterrupt, MLLMServerOutputTranscript, MLLMServerSessionReady
+from ten_ai_base.struct import MLLMClientFunctionCallOutput, MLLMClientMessageItem, MLLMServerFunctionCall, MLLMServerInputTranscript, MLLMServerInterrupt, MLLMServerOutputTranscript, MLLMServerSessionReady
 from ten_runtime import (
     AudioFrame,
     AsyncTenEnv,
@@ -176,10 +176,10 @@ class OpenAIRealtime2Extension(AsyncMLLMBaseExtension):
                             self.ten_env.log_info(
                                 f"On request transcript delta {message.item_id} {message.content_index}"
                             )
-                            self.request_transcript += message.transcript
+                            self.request_transcript += message.delta
                             await self.send_server_input_transcript(MLLMServerInputTranscript(
                                 content=self.request_transcript,
-                                delta=message.transcript,
+                                delta=message.delta,
                                 final=False,
                                 metadata={
                                     "session_id": self.session_id if self.session_id else "-1",
@@ -519,6 +519,21 @@ class OpenAIRealtime2Extension(AsyncMLLMBaseExtension):
         self.available_tools.append(tool)
         await self._update_session()
 
+    async def send_client_function_call_output(self, function_call_output: MLLMClientFunctionCallOutput) -> None:
+        """
+        Send a function call output to the MLLM service.
+        This method is used to send the result of a function call made by the LLM.
+        """
+        self.ten_env.log_info(f"Sending function call output: {function_call_output.output}")
+        await self.conn.send_request(
+            ItemCreate(
+                item=FunctionCallOutputItemParam(
+                    call_id=function_call_output.call_id,
+                    output=function_call_output.output,
+                )
+            )
+        )
+
     async def _resume_context(self, messages: list[MLLMClientMessageItem]) -> None:
         """
         Resume the context with the provided messages.
@@ -534,63 +549,50 @@ class OpenAIRealtime2Extension(AsyncMLLMBaseExtension):
         self.ten_env.log_info(
             f"_handle_tool_call {tool_call_id} {name} {arguments}"
         )
-        cmd: Cmd = Cmd.create(CMD_TOOL_CALL)
-        cmd.set_property_string("name", name)
-        cmd.set_property_from_json("arguments", arguments)
-        [result, _] = await self.ten_env.send_cmd(cmd)
-
-        tool_response = ItemCreate(
-            item=FunctionCallOutputItemParam(
+        await self.send_server_function_call(
+            MLLMServerFunctionCall(
                 call_id=tool_call_id,
-                output='{"success":false}',
+                name=name,
+                arguments=arguments
             )
         )
-        if result.get_status_code() == StatusCode.OK:
-            r, _ = result.get_property_to_json(CMD_PROPERTY_RESULT)
-            tool_result: LLMToolResult = json.loads(r)
+    #     cmd: Cmd = Cmd.create(CMD_TOOL_CALL)
+    #     cmd.set_property_string("name", name)
+    #     cmd.set_property_from_json("arguments", arguments)
+    #     [result, _] = await self.ten_env.send_cmd(cmd)
 
-            result_content = tool_result["content"]
-            tool_response.item.output = json.dumps(
-                self._convert_to_content_parts(result_content)
-            )
-            self.ten_env.log_info(f"tool_result: {tool_call_id} {tool_result}")
-        else:
-            self.ten_env.log_error("Tool call failed")
+    #     tool_response = ItemCreate(
+    #         item=FunctionCallOutputItemParam(
+    #             call_id=tool_call_id,
+    #             output='{"success":false}',
+    #         )
+    #     )
+    #     if result.get_status_code() == StatusCode.OK:
+    #         r, _ = result.get_property_to_json(CMD_PROPERTY_RESULT)
+    #         tool_result: LLMToolResult = json.loads(r)
 
-        await self.conn.send_request(tool_response)
-        await self.conn.send_request(ResponseCreate())
-        self.ten_env.log_info(f"_remote_tool_call finish {name} {arguments}")
+    #         result_content = tool_result["content"]
+    #         tool_response.item.output = json.dumps(
+    #             self._convert_to_content_parts(result_content)
+    #         )
+    #         self.ten_env.log_info(f"tool_result: {tool_call_id} {tool_result}")
+    #     else:
+    #         self.ten_env.log_error("Tool call failed")
 
-    def _convert_tool_params_to_dict(self, tool: LLMToolMetadata):
-        json_dict = {"type": "object", "properties": {}, "required": []}
+    #     await self.conn.send_request(tool_response)
+    #     await self.conn.send_request(ResponseCreate())
+    #     self.ten_env.log_info(f"_remote_tool_call finish {name} {arguments}")
 
-        for param in tool.parameters:
-            json_dict["properties"][param.name] = {
-                "type": param.type,
-                "description": param.description,
-            }
-            if param.required:
-                json_dict["required"].append(param.name)
+    # def _convert_to_content_parts(
+    #     self, content: Iterable[LLMChatCompletionContentPartParam]
+    # ):
+    #     content_parts = []
 
-        return json_dict
-
-    def _convert_to_content_parts(
-        self, content: Iterable[LLMChatCompletionContentPartParam]
-    ):
-        content_parts = []
-
-        if isinstance(content, str):
-            content_parts.append({"type": "text", "text": content})
-        else:
-            for part in content:
-                # Only text content is supported currently for v2v model
-                if part["type"] == "text":
-                    content_parts.append(part)
-        return content_parts
-
-    async def _flush(self) -> None:
-        try:
-            c = Cmd.create("flush")
-            await self.ten_env.send_cmd(c)
-        except Exception:
-            self.ten_env.log_error("Error flush")
+    #     if isinstance(content, str):
+    #         content_parts.append({"type": "text", "text": content})
+    #     else:
+    #         for part in content:
+    #             # Only text content is supported currently for v2v model
+    #             if part["type"] == "text":
+    #                 content_parts.append(part)
+    #     return content_parts
