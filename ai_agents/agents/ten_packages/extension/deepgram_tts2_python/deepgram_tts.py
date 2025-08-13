@@ -3,26 +3,24 @@ import json
 import websockets
 import aiohttp
 import time
-from dataclasses import dataclass
 from datetime import datetime
 from typing import AsyncIterator, Optional, Dict, Any
 from ten_runtime.async_ten_env import AsyncTenEnv
-from ten_ai_base.config import BaseConfig
+from pydantic import BaseModel
 import uuid
 import threading
 from asyncio import Queue
 
 
-@dataclass
-class DeepgramTTSConfig(BaseConfig):
+class DeepgramTTSConfig(BaseModel):
+    """Configuration for Deepgram TTS using BaseModel instead of BaseConfig"""
     api_key: str = ""
     model: str = "aura-asteria-en"
     voice: str = "aura-asteria-en"
     encoding: str = "linear16"
     sample_rate: int = 24000
     container: str = "none"
-    # Enhanced options
-    use_rest_fallback: bool = True
+    # Connection options
     websocket_timeout: float = 10.0
     min_audio_threshold: int = 1000
     # Persistent connection options
@@ -34,42 +32,64 @@ class DeepgramTTSConfig(BaseConfig):
     # Dump options
     dump_enabled: bool = False
     dump_path: str = "/tmp/tts_test_dump"
+    
+    class Config:
+        # Allow parameter pass-through
+        extra = "allow"
 
 
-class TTSRequest:
-    """Represents a TTS request with its associated response queue"""
-    def __init__(self, request_id: str, text: str):
+class StreamingTTSRequest:
+    """Represents a streaming TTS request that accumulates text chunks"""
+    def __init__(self, request_id: str):
         self.request_id = request_id
-        self.text = text
-        self.audio_queue: Queue = Queue()
-        self.completed = False
-        self.error: Optional[Exception] = None
+        self.text_chunks = []
+        self.is_complete = False
+        self.audio_started = False
+        self.start_time = time.time()
+        self.first_audio_time = None
+        
+    def add_text_chunk(self, text: str, is_end: bool = False):
+        """Add a text chunk to the streaming request"""
+        self.text_chunks.append(text)
+        if is_end:
+            self.is_complete = True
+    
+    def get_combined_text(self) -> str:
+        """Get all text chunks combined"""
+        return "".join(self.text_chunks)
+    
+    def mark_audio_started(self):
+        """Mark when first audio chunk is received"""
+        if not self.audio_started:
+            self.audio_started = True
+            self.first_audio_time = time.time()
+    
+    def get_ttfb_ms(self) -> int:
+        """Get time to first byte in milliseconds"""
+        if self.first_audio_time:
+            return int((self.first_audio_time - self.start_time) * 1000)
+        return 0
 
 
 class DeepgramTTS:
     def __init__(self, config: DeepgramTTSConfig):
         self.config = config
         self.websocket_url = self._build_websocket_url()
-        self.rest_url = self._build_rest_url()
         self.headers = {
             "Authorization": f"Token {config.api_key}"
         }
         
-        # Persistent WebSocket connection management
+        # Lazy connection - don't connect during init
         self.websocket: Optional[websockets.WebSocketServerProtocol] = None
         self.connection_lock = asyncio.Lock()
-        self.is_connecting = False
         self.is_connected = False
-        self.connection_task: Optional[asyncio.Task] = None
         self.message_handler_task: Optional[asyncio.Task] = None
         
-        # Request management
-        self.pending_requests: Dict[str, TTSRequest] = {}
-        self.request_queue: Queue = Queue()
+        # Streaming request management
+        self.active_requests: Dict[str, StreamingTTSRequest] = {}
         self.ten_env: Optional[AsyncTenEnv] = None
         
         # Connection health
-        self.last_ping_time = 0
         self.keepalive_task: Optional[asyncio.Task] = None
 
     def _build_websocket_url(self) -> str:
@@ -430,7 +450,89 @@ class DeepgramTTS:
                 if consecutive_failures >= max_consecutive_failures:
                     self.is_connected = False
 
-    async def get(self, ten_env: AsyncTenEnv, text: str) -> AsyncIterator[bytes]:
+    async def add_text_chunk(self, request_id: str, text: str, is_end: bool = False) -> None:
+        """Add a text chunk to a streaming request"""
+        if request_id not in self.active_requests:
+            # Create new streaming request
+            self.active_requests[request_id] = StreamingTTSRequest(request_id)
+            self.ten_env.log_info(f"Created new streaming request: {request_id}")
+        
+        request = self.active_requests[request_id]
+        request.add_text_chunk(text, is_end)
+        
+        self.ten_env.log_info(f"Added text chunk to {request_id}: '{text[:30]}...' (is_end: {is_end})")
+        
+        # If this is the end, start processing the complete request
+        if is_end:
+            await self._process_complete_request(request)
+    
+    async def _process_complete_request(self, request: StreamingTTSRequest) -> None:
+        """Process a complete streaming request"""
+        try:
+            combined_text = request.get_combined_text()
+            self.ten_env.log_info(f"Processing complete request {request.request_id}: '{combined_text[:50]}...' (total length: {len(combined_text)})")
+            
+            # Ensure connection
+            if not await self._ensure_connection():
+                raise Exception("Failed to establish WebSocket connection")
+            
+            # Send the complete text to Deepgram
+            await self._send_text_to_deepgram(request.request_id, combined_text)
+            
+        except Exception as e:
+            self.ten_env.log_error(f"Error processing complete request {request.request_id}: {str(e)}")
+            # Clean up failed request
+            if request.request_id in self.active_requests:
+                del self.active_requests[request.request_id]
+            raise
+    
+    async def _send_text_to_deepgram(self, request_id: str, text: str) -> None:
+        """Send complete text to Deepgram WebSocket"""
+        try:
+            # Send text message
+            text_message = {
+                "type": "Speak",
+                "text": text
+            }
+            await self.websocket.send(json.dumps(text_message))
+            self.ten_env.log_info(f"Sent text to Deepgram for request {request_id}")
+            
+            # Send flush to trigger audio generation
+            flush_command = {"type": "Flush"}
+            await self.websocket.send(json.dumps(flush_command))
+            self.ten_env.log_info(f"Sent flush command for request {request_id}")
+            
+        except Exception as e:
+            self.ten_env.log_error(f"Error sending text to Deepgram: {str(e)}")
+            raise
+
+    async def get_streaming_audio(self, request_id: str) -> AsyncIterator[bytes]:
+        """Get streaming audio for a specific request"""
+        if request_id not in self.active_requests:
+            raise ValueError(f"Request {request_id} not found")
+        
+        request = self.active_requests[request_id]
+        
+        try:
+            # Wait for audio chunks from the WebSocket message handler
+            while True:
+                # In a real implementation, this would yield audio chunks
+                # as they arrive from the WebSocket connection
+                # For now, this is a placeholder that will be handled
+                # by the message handler
+                await asyncio.sleep(0.1)
+                
+                # Check if request is complete
+                if hasattr(request, 'audio_complete') and request.audio_complete:
+                    break
+                    
+        except Exception as e:
+            self.ten_env.log_error(f"Error in streaming audio for {request_id}: {str(e)}")
+            raise
+        finally:
+            # Clean up completed request
+            if request_id in self.active_requests:
+                del self.active_requests[request_id]
         """
         Get TTS audio using persistent WebSocket connection with robust error handling
         """
